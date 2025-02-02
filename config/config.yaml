@@ -1,0 +1,120 @@
+device:
+  preference: 'cuda'
+  index: null
+  
+loss:
+  mse: 0.5
+  mae: 0.5
+
+distributed_training:
+  num_processes: 2
+  per_gpu_batch_size: 32
+  total_batch_size: 32  # per_gpu_batch_size * num_processes
+  workers_per_gpu: 6
+  workers: 12  # workers_per_gpu * num_processes
+  grad_accumulate: 2
+
+optimization:
+  base_lr: 1.0e-5
+  max_lr: 1.0e-4
+  lr: 1.414e-5  # base_lr * sqrt(total_batch_size / per_gpu_batch_size)
+
+training_info:
+  epochs: 40
+  validation_delay: 1
+  patience: 10
+
+experiment:
+  project_name: "DEF"
+  experiment_name: "init-op"
+  save_path: "/data/users/jupyter-dam724/def-era/checkpoint/operator/init-op/"
+  from_checkpoint: null
+  from_state: null
+
+# Input dataset
+dataset:
+  root_dir: ERA5/5.65deg
+  time_resolution: 6h              # Time between two consecutive samples
+  forecast_steps: 1                # Number of autoregressive steps for forecasting
+
+# Training parameters
+training:
+  dataset:
+    start_date: 2000-01-01         # Start date for the training dataset (YYYY-MM-DD)
+    end_date: 2019-12-31           # End date for the training dataset (YYYY-MM-DD)
+
+  validation_dataset:
+    start_date: 2022-01-01         # Start date for the validation dataset (YYYY-MM-DD)
+    end_date: 2023-12-31           # End date for the validation dataset (YYYY-MM-DD)
+
+  variable_loss_weights:
+    atmospheric:
+      wind_x: 1.0
+      wind_y: 1.0
+      wind_z: 1.0
+      geopotential: 1.0
+      specific_humidity: 1.0
+      temperature: 1.0
+    surface:
+      wind_x_10m: 0.1
+      wind_y_10m: 0.1
+      2m_temperature: 0.1
+      mean_sea_level_pressure: 0.1
+      surface_pressure: 0.1
+      total_column_water: 0.1
+      total_precipitation_6hr: 0.1
+
+features:
+  pressure_levels:
+    - 50
+    - 100
+    - 150
+    - 200
+    - 250
+    - 300
+    - 400
+    - 500
+    - 600
+    - 700
+    - 850
+    - 925
+    - 1000
+
+  base:
+    atmospheric:
+      - geopotential
+      - wind_x
+      - wind_y
+      - wind_z
+      - specific_humidity
+      - temperature
+    surface:
+      - wind_x_10m
+      - wind_y_10m
+      - 2m_temperature
+      - mean_sea_level_pressure
+      - surface_pressure
+      - total_column_water
+      - total_precipitation_6hr
+
+  input:
+    atmospheric: ${features.base.atmospheric}
+    surface: ${features.base.surface}
+    forcings:
+      - toa_incident_solar_radiation
+      - sin_time_of_day
+      - cos_time_of_day
+      - sin_year_progress
+      - cos_year_progress
+    constants:
+      - geopotential_at_surface
+      - land_sea_mask
+      - slope_of_sub_gridscale_orography
+      - standard_deviation_of_orography
+      - latitude
+      - longitude
+
+  output:
+    atmospheric: ${features.base.atmospheric}
+    surface: ${features.base.surface}
+

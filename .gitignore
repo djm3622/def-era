@@ -1,3 +1,9 @@
+checkpoint/
+ERA5/
+outputs/
+wandb/
+testing.ipynb
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
