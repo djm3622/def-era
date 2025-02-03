@@ -230,8 +230,7 @@ class ERA5Dataset(torch.utils.data.Dataset):
         x = torch.tensor(input_data.data, dtype=self.dtype)
         y = torch.tensor(true_data.data, dtype=self.dtype)
 
-        # Apply normalizations
-        self._apply_normalization(x, y)
+        # Apply normalizations : removed for easier autoregression [self._apply_normalization(x, y)]
         x, y = self._standardize(x), self._standardize(y)
         
          # Compute forcings

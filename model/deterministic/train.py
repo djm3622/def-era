@@ -49,10 +49,9 @@ def training_loop(
     best_val_loss = float('inf')
     patience_counter = 0
     
-    # Debug prints
+    # Sanity Check
     accelerator.print(f"Rank: {accelerator.process_index}")
     accelerator.print(f"Train dataset size: {len(train.dataset)}")
-    accelerator.print(f"Batch size: {train.batch_size}")
     accelerator.print(f"Number of workers: {train.num_workers if hasattr(train, 'num_workers') else 'N/A'}")
     
     start_time = time.time()
@@ -64,7 +63,6 @@ def training_loop(
         model.train()
         train_loss = 0
         
-        # Training batch progress bar
         train_bar = tqdm(
             train, 
             desc=f'Training', 
@@ -83,7 +81,10 @@ def training_loop(
                 train_loss += loss.item()
             
             if loading_bar:
-                train_bar.set_postfix(train_loss=loss.item())
+                train_bar.set_postfix(
+                    train_loss=loss.item(), 
+                    lr=scheduler.get_last_lr()[0]
+                )
                                             
         train_loss /= len(train)
         gathered_train_loss = accelerator.gather(torch.tensor([train_loss]).to(accelerator.device)).mean().item()
@@ -127,7 +128,7 @@ def training_loop(
                 val_loss += loss.item()
                 
                 if loading_bar:
-                    loader.set_postfix(val_loss=loss.item())
+                    valid_bar.set_postfix(val_loss=loss.item())
                                             
         val_loss /= len(valid)
         accelerator.wait_for_everyone()

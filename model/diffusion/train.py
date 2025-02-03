@@ -6,13 +6,31 @@ import random
 import torch
 import numpy as np
 import os
+from typing import Tuple
+from omegaconf import DictConfig
+
+from accelerate import Accelerator
+from torch.utils.data import DataLoader
+from torch.nn import Module
+import torch.optim as optim
+
 
 # class conditional sampling
 @torch.no_grad()
 def sampling_with_cfg(
-    model, operator, samples, t_timesteps, beta, alpha, 
-    alpha_bar, accelerator, size, condition, guidance_scale=7.5
-):
+    model: Module, 
+    operator: Module, 
+    samples: int, 
+    t_timesteps: int, 
+    beta: torch.Tensor, 
+    alpha: torch.Tensor, 
+    alpha_bar: torch.Tensor, 
+    accelerator: Accelerator, 
+    size: int, 
+    condition : torch.Tensor, 
+    guidance_scale: int = 7.5
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    
     c, w, h = 1, size[0], size[1]
     imgs = torch.randn((samples, c, w, h), device=accelerator.device)
     
@@ -31,11 +49,7 @@ def sampling_with_cfg(
     )    
 
     # Create full batch with conditioned and unconditioned
-    batch_cond = torch.cat([mixed_condition, torch.zeros_like(mixed_condition)])
-    
-    
-    # TODO : log the condition statisitcs (what is from operator and what is not)
-    
+    batch_cond = torch.cat([mixed_condition, torch.zeros_like(mixed_condition)])    
     
     for step in range(t_timesteps-1, -1, -1):
         # Create double-sized batch of images for parallel conditioned/unconditioned prediction
@@ -68,11 +82,88 @@ def sampling_with_cfg(
     return imgs, mixed_condition
 
 
-def accelerator_train(
-    accelerator, train, valid, model, operator, epochs, criterion, save_path, loss_type, train_log,
-    optimizer, scheduler, sample_delay, t_timesteps, size, config=None, loading_bar=False
-):
+def step(
+    train_batch: Tuple[torch.Tensor, torch.Tensor, torch.Tensor], 
+    model: Module, 
+    criterion: Module
+) -> torch.Tensor:
     
+    clean_images, noisy_images, rand_timesteps = train_batch
+    alpha_bar_t = alpha_bar[rand_timesteps].view(-1, 1, 1, 1)
+
+    b, c, h, w = clean_images.shape
+
+    null_mask = torch.rand(b, device=clean_images.device) < 0.1
+
+    # For non-null samples, decide between clean images and operator output (50% chance each)
+    operator_mask = torch.rand(b, device=clean_images.device) < 0.5
+    operator_mask = operator_mask & ~null_mask  # Only apply to non-null samples
+
+    # Apply operator to clean images where needed
+    with torch.no_grad():
+        operator_output = operator(
+            clean_images, torch.ones(b, device=clean_images.device), 
+            return_dict=False)[0].detach() if operator_mask.any() else clean_images
+
+    # Create target images - use operator output where appropriate
+    target_images = torch.where(
+        operator_mask.view(-1, 1, 1, 1).expand_as(clean_images),
+        operator_output,
+        clean_images
+    )
+
+    # Create the final conditioning
+    mixed_condition = torch.zeros_like(clean_images)  # Start with zeros (null conditioning)
+    # Add clean images where appropriate
+    mixed_condition = torch.where(
+        (~null_mask & ~operator_mask).view(-1, 1, 1, 1).expand_as(clean_images),
+        clean_images,
+        mixed_condition
+    )
+    # Add operator output where appropriate
+    mixed_condition = torch.where(
+        operator_mask.view(-1, 1, 1, 1).expand_as(clean_images),
+        operator_output,
+        mixed_condition
+    )
+
+    # Calculate next state using the appropriate target images
+    next_state = (torch.sqrt(alpha_bar_t) * target_images) + (torch.sqrt(1 - alpha_bar_t) * noisy_images)
+
+    model_inpt = torch.concat([mixed_condition, next_state], dim=1)
+    noise_pred = model(model_inpt, rand_timesteps.squeeze(-1), return_dict=False)[0]
+
+    return criterion(noise_pred, noisy_images)
+
+
+def training_loop(
+    accelerator: Accelerator, 
+    train: DataLoader, 
+    valid: DataLoader, 
+    model: Module, 
+    operator: Module, 
+    epochs: int, 
+    criterion: Module, 
+    save_path: str, 
+    optimizer: optim, 
+    scheduler: optim.lr_scheduler, 
+    t_timesteps: int, 
+    val_delay: int = 1, 
+    loading_bar: bool = False,
+    config: DictConfig = {}
+) -> None:
+    
+    # Sanity Check
+    accelerator.print(f"Rank: {accelerator.process_index}")
+    accelerator.print(f"Train dataset size: {len(train.dataset)}")
+    accelerator.print(f"Number of workers: {train.num_workers if hasattr(train, 'num_workers') else 'N/A'}")
+    
+    start_time = time.time()
+    first_batch = next(iter(train))
+    fetch_time = time.time() - start_time
+    accelerator.print(f"Time to fetch first batch: {fetch_time:.2f} seconds")
+    
+    # allocate memory for these
     beta = torch.linspace(1e-4, 0.02, t_timesteps).to(accelerator.device)
     alpha = 1.0 - beta
     alpha_bar = torch.cumprod(alpha, dim=0).to(accelerator.device)
@@ -81,64 +172,19 @@ def accelerator_train(
     # 0.50 to use the operator output
     # use (states + operator output) as as next_state prediction
     
-    def step(train_batch, model, criterion):
-        clean_images, noisy_images, rand_timesteps = train_batch
-        alpha_bar_t = alpha_bar[rand_timesteps].view(-1, 1, 1, 1)
-
-        b, c, h, w = clean_images.shape
-
-        null_mask = torch.rand(b, device=clean_images.device) < 0.1
-
-        # For non-null samples, decide between clean images and operator output (50% chance each)
-        operator_mask = torch.rand(b, device=clean_images.device) < 0.5
-        operator_mask = operator_mask & ~null_mask  # Only apply to non-null samples
-
-        # Apply operator to clean images where needed
-        with torch.no_grad():
-            operator_output = operator(
-                clean_images, torch.ones(b, device=clean_images.device), 
-                return_dict=False)[0].detach() if operator_mask.any() else clean_images
-
-        # Create target images - use operator output where appropriate
-        target_images = torch.where(
-            operator_mask.view(-1, 1, 1, 1).expand_as(clean_images),
-            operator_output,
-            clean_images
-        )
-
-        # Create the final conditioning
-        mixed_condition = torch.zeros_like(clean_images)  # Start with zeros (null conditioning)
-        # Add clean images where appropriate
-        mixed_condition = torch.where(
-            (~null_mask & ~operator_mask).view(-1, 1, 1, 1).expand_as(clean_images),
-            clean_images,
-            mixed_condition
-        )
-        # Add operator output where appropriate
-        mixed_condition = torch.where(
-            operator_mask.view(-1, 1, 1, 1).expand_as(clean_images),
-            operator_output,
-            mixed_condition
-        )
-
-        # Calculate next state using the appropriate target images
-        next_state = (torch.sqrt(alpha_bar_t) * target_images) + (torch.sqrt(1 - alpha_bar_t) * noisy_images)
-
-        model_inpt = torch.concat([mixed_condition, next_state], dim=1)
-        noise_pred = model(model_inpt, rand_timesteps.squeeze(-1), return_dict=False)[0]
-
-        return criterion(noise_pred, noisy_images)
-    
     model.train()
     for epoch in range(epochs):
         train_loss = 0
         
-        if loading_bar:
-            loader = tqdm(train, desc=f'Training', leave=False, mininterval=1.0)
-        else:
-            loader = train
+        train_bar = tqdm(
+            train, 
+            desc=f'Training', 
+            leave=False,
+            disable=not (loading_bar and accelerator.is_main_process),
+            mininterval=1.0  # Update more frequently
+        )
         
-        for batch_idx, train_batch in enumerate(loader):
+        for batch_idx, train_batch in enumerate(train_bar):
             with accelerator.accumulate(model):
                 loss = step(train_batch, model, criterion)
                 accelerator.backward(loss)
@@ -148,16 +194,18 @@ def accelerator_train(
                 train_loss += loss.item()
                                 
             if loading_bar:
-                loader.set_postfix(train_loss=loss.item())
+                train_bar.set_postfix(
+                    train_loss=loss.item(), 
+                    lr=scheduler.get_last_lr()[0]
+                )
                                                             
         train_loss /= len(train)
         gathered_train_loss = accelerator.gather(torch.tensor([train_loss]).to(accelerator.device)).mean().item()
-        train_log.append(gathered_train_loss)
-        
         accelerator.print(f'Epoch {epoch+1}/{epochs}, Train Loss: {gathered_train_loss}')
         
         samples_np, conditions_np = None, None
 
+        # monitor the quality of the samples
         if epoch % sample_delay == 0:
             # Get a batch from validation set
             valid_batch = next(iter(valid))

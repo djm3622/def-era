@@ -1,37 +1,60 @@
 device:
   preference: 'cuda'
-  index: null
+  index: 3
   
-loss:
-  mse: 0.5
-  mae: 0.5
+evaluation:
+  start_time: 10
+  iterations: 30
+  save_path: 'outputs/temp/evaluation_data/'
+  
+  pressure_levels:
+    50: True
+    100: True
+    150: True
+    200: True
+    250: True
+    300: True
+    400: True
+    500: True
+    600: True
+    700: True
+    850: True
+    925: True
+    1000: True
+
+  base:
+    atmospheric:
+      geopotential: True
+      wind_x: True
+      wind_y: True
+      wind_z: True
+      specific_humidity: True
+      temperature: True
+    surface:
+      wind_x_10m: True
+      wind_y_10m: True
+      2m_temperature: True
+      mean_sea_level_pressure: True
+      surface_pressure: True
+      total_column_water: True
+      total_precipitation_6hr: True
+
 
 distributed_training:
   num_processes: 2
   per_gpu_batch_size: 32
-  total_batch_size: 32  # per_gpu_batch_size * num_processes
+  total_batch_size: 64  # per_gpu_batch_size * num_processes
   workers_per_gpu: 6
-  workers: 12  # workers_per_gpu * num_processes
-  grad_accumulate: 2
-
-optimization:
-  base_lr: 1.0e-5
-  max_lr: 1.0e-4
-  lr: 1.414e-5  # base_lr * sqrt(total_batch_size / per_gpu_batch_size)
-
-training_info:
-  epochs: 60
-  validation_delay: 1
-  patience: 10
-  timesteps: 1000
+  training_workers: 12  # workers_per_gpu * num_processes
+  validation_workers: 12  # workers_per_gpu * num_processes
+  grad_accumulate: 1
 
 experiment:
   project_name: "DEF"
-  experiment_name: "op-fulltrain-01"
-  save_path: "/data/users/jupyter-dam724/def-era/checkpoint/operator/op-fulltrain-01/"
-  from_checkpoint: null
-  from_state: null
-
+  experiment_name: "init-op"
+  save_path: "outputs/"
+  from_checkpoint: "checkpoint/operator/init-op/checkpoint_epoch_39.pt"
+  
 # Input dataset
 dataset:
   root_dir: ERA5/5.65deg
@@ -41,11 +64,11 @@ dataset:
 # Training parameters
 training:
   dataset:
-    start_date: 1960-01-01         # Start date for the training dataset (YYYY-MM-DD)
-    end_date: 2014-12-31           # End date for the training dataset (YYYY-MM-DD)
+    start_date: 2000-01-01         # Start date for the training dataset (YYYY-MM-DD)
+    end_date: 2019-12-31           # End date for the training dataset (YYYY-MM-DD)
 
   validation_dataset:
-    start_date: 2015-01-01         # Start date for the validation dataset (YYYY-MM-DD)
+    start_date: 2022-01-01         # Start date for the validation dataset (YYYY-MM-DD)
     end_date: 2023-12-31           # End date for the validation dataset (YYYY-MM-DD)
 
   variable_loss_weights:

@@ -176,7 +176,7 @@ def stack_data(ds, output_base_dir):
     ds = compute_cartesian_wind(ds)
 
     # Determine the minimum and maximum years in the dataset
-    min_year = 2010
+    min_year = 1959
     max_year = numpy.max(ds["time.year"].values)
 
     # Keep only variables with a time dimension (e.g., atmospheric and surface variables)

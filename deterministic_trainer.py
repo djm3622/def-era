@@ -23,34 +23,29 @@ import utils.utility as utility
 
 from accelerate import Accelerator
 
-def set_random_seeds(seed: int) -> None:
-    torch.manual_seed(seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed(seed)
-        torch.cuda.manual_seed_all(seed)
-    
-    random.seed(seed)
-    np.random.seed(seed)
-
 
 @hydra.main(version_base=None, config_path="config", config_name="config")
 def main(cfg: DictConfig) -> None:
     
     # reused variables
     save_path = cfg['experiment']['save_path']
+
+    # get accelerator
+    accelerator = Accelerator(gradient_accumulation_steps=cfg['distributed_training']['grad_accumulate'])
     
     # intial setup
     seed = cfg.get("training.seed", 42)  # Default to 42 if not specified
-    set_random_seeds(seed)
+    utility.set_random_seeds(seed)
     
     # logging/checkpointing setup
-    # utility.validate_and_create_save_path(cfg['experiment']['save_path'], cfg['experiment']['experiment_name'])    
-    wbhelp.init_wandb(
-        project_name=cfg['experiment']['project_name'],
-        run_name=cfg['experiment']['experiment_name'],
-        config_class=cfg,
-        save_path=save_path
-    )
+    if accelerator.is_main_process:
+        utility.validate_and_create_save_path(cfg['experiment']['save_path'], cfg['experiment']['experiment_name'])    
+        wbhelp.init_wandb(
+            project_name=cfg['experiment']['project_name'],
+            run_name=cfg['experiment']['experiment_name'],
+            config_class=cfg,
+            save_path=save_path
+        )
     
     # get datasets
     train_dataset = data.ERA5Dataset(
@@ -87,7 +82,8 @@ def main(cfg: DictConfig) -> None:
     pred_model = model.get_unet_based_model(
         domain_x, domain_y, in_c, out_c, cfg
     )
-    wbhelp.save_model_architecture(pred_model, cfg['experiment']['save_path'])
+    if accelerator.is_main_process:
+        wbhelp.save_model_architecture(pred_model, cfg['experiment']['save_path'])
     
     # load from checkpoint if needed
     if cfg['experiment']['from_checkpoint'] is not None:
@@ -102,9 +98,6 @@ def main(cfg: DictConfig) -> None:
         optimizer, cfg['optimization']['max_lr'],
         cfg['training_info']['epochs'], len(train_dl)
     )
-    
-    # get accelerator
-    accelerator = Accelerator(gradient_accumulation_steps=cfg['distributed_training']['grad_accumulate'])
     
     # load from state if needed
     if cfg['experiment']['from_state'] is not None:

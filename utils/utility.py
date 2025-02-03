@@ -1,6 +1,31 @@
 import os
 import torch
 import numpy as np
+import random
+
+def set_device(device_pref, device_ind):
+    device = None
+    
+    if device_pref == 'cuda' and torch.cuda.is_available():
+        device = torch.device(f'cuda:{device_ind}') if device_ind is not None else torch.device(f'cuda')
+        print('Now using GPU.')
+    else:
+        device = torch.device('cpu')
+        if device_pref == 'cuda':
+            print('GPU not available, defaulting to CPU.')
+        else:
+            print('Now using CPU.')
+    
+    return device
+
+def set_random_seeds(seed: int) -> None:
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+    
+    random.seed(seed)
+    np.random.seed(seed)
 
 def validate_and_create_save_path(save_path, experiment_name):
     if experiment_name is None:

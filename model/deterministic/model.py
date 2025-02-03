@@ -16,11 +16,11 @@ def get_unet_based_model(
         in_channels=in_channels,         
         out_channels=out_channels,         
         layers_per_block=4,      
-        block_out_channels=(128, 128, 256, 256),  
+        block_out_channels=(128, 256, 384, 512),  
         down_block_types=(
-            "DownBlock2D",      # 32 channels at 32x64
-            "AttnDownBlock2D",  # 64 channels at 16x32
-            "AttnDownBlock2D",  # 128 channels at 8x16
+            "DownBlock2D",      # 128 channels at 32x64
+            "AttnDownBlock2D",  # 256 channels at 16x32
+            "AttnDownBlock2D",  # 384 channels at 8x16
             "AttnDownBlock2D",  # 512 channels at 4x8
         ),
         up_block_types=(
