@@ -20,24 +20,49 @@ Reposity for my capstone project. Much of the code is adapted from ECCC's reposi
   2. Tree-based forecasting by learning a state value function associated with uncertainty.
 2. See how conformal prediction could be used autoregressively.
 
-#### Usage
-#### Configurations
+## Usage
+### Configurations
 There are two primary configuration files, the `config.yaml` and `accelerator.yaml`, both located in the `config/` directory.
 The `config.yaml` handles the training (both deterministic and diffusion) and dataset parameters while the `accelerator.yaml` handles the parameters for ditributed training.
 
-##### Training (deterministic model)
-For training the deterministic model,
-```
-accelerate launch --config_file config/accelerator.yaml operator_trainer.py [override_args]
-```
-where `[override_args]` can override the inputs in the config file.
+In the following sections, each command will allow for `[override_args]`, which overrides the inputs in the config file.
 
-##### Training (diffusion model)
-For training the deterministic model,
+
+### Training
+The following section details how to train each model in a distributed evironment.
+
+##### deterministic model
+
+For training the deterministic model:
+```
+accelerate launch --config_file config/accelerator.yaml deterministic_trainer.py [override_args]
+```
+
+##### diffusion model
+
+For training the diffusion model:
 ```
 accelerate launch --config_file config/accelerator.yaml diffusion_trainer.py [override_args]
 ```
-where `[override_args]` can override the inputs in the config file.
+
+### Evaluation
+The following section explains how to run our built-in evaluation scripts.
+
+#### deterministic model
+
+For evaluating the deterministic model:
+```
+python deterministic_eval.py [override_args]
+```
+
+This script will write trajectory .gifs and RMSE plots for selected variables and timesteps within the config.
+
+#### diffusion model
+
+For evaluating the diffusion model:
+```
+python diffusion_eval.py [override_args]
+```
 
 #### Dataset 
 *Please note, these are the same instructions as those from PARADIS, if you have already done this there is no need to do it again.*
