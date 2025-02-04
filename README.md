@@ -2,16 +2,18 @@
 
 Reposity for my capstone project. Much of the code is adapted from ECCC's repository for PARADIS (not the model, just the data acquisition and loading). 
 
-## TODO
-1. Train operator.
-2. While it is training, write script for diffusion model. (monitor progess, MAKE SURE TO USE MOST OF THE DATA -> print start, end, dataset size)
-3. When operator finishes, evaluate its autoregressive predictions.
+## TODO (nearing done)
+1. Add units (mean+std) to the returned from the original and diffusion datasets.
+2. Update deterministic_eval to use these calculated values instead.
+3. Updated deterministic_trainer, diffusion_trainer, model.determinstic.train, and model.diffusion.train to account for extra info. They don't need to use them but return counts will now be changed.
 
 **If all goes well and the diffusion model and operator fit well.**
 1. Fit full operator, same size data as used for diffusion model.
-2. Setup eval pipelines to determine best solver (DDIM, DPM++, etc.) along with parameters (eta, guidance, etc.)
+2. Train diffusion model.
+3. Setup eval pipelines to determine best solver (DDIM, DPM++, etc.) along with parameters (eta, guidance, etc.)
   1. This requires setting up various metrics and LOT OF TIME.
 3. Setup traditional techniques. (SV, random/transform)
+  1. Not sure if will need to do this since I will have units.
 4. Determine strengths and weaknesses.
 
 **If all goes well...**

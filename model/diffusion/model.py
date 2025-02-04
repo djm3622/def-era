@@ -15,7 +15,7 @@ def get_unet_based_model(
         in_channels=channels*2,  # accounting for the condition      
         out_channels=channels,         
         layers_per_block=4,      
-        block_out_channels=(256, 384, 512, 1024),  
+        block_out_channels=(256, 512, 512, 1024),  
         down_block_types=(
             "DownBlock2D",      # 128 channels at 32x64
             "AttnDownBlock2D",  # 256 channels at 16x32

@@ -23,17 +23,16 @@ optimization:
   lr: 1.414e-5  # base_lr * sqrt(total_batch_size / per_gpu_batch_size)
 
 training_info:
-  epochs: 60
+  epochs: 30
   validation_delay: 1
   patience: 10
-  timesteps: 1000
 
 experiment:
   project_name: "DEF"
-  experiment_name: "op-fulltrain-01"
-  save_path: "/data/users/jupyter-dam724/def-era/checkpoint/operator/op-fulltrain-01/"
+  experiment_name: "op-fulltrain-02"
+  save_path: "/data/users/jupyter-dam724/def-era/checkpoint/operator/op-fulltrain-02/"
   from_checkpoint: null
-  from_state: null
+  from_state: "checkpoint/operator/op-fulltrain-01/checkpoint_epoch_33.pt"
 
 # Input dataset
 dataset:
