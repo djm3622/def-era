@@ -39,7 +39,7 @@ def main(cfg: DictConfig) -> None:
     
     # logging/checkpointing setup
     if accelerator.is_main_process:
-        utility.validate_and_create_save_path(cfg['experiment']['save_path'], cfg['experiment']['experiment_name'])    
+        #utility.validate_and_create_save_path(cfg['experiment']['save_path'], cfg['experiment']['experiment_name'])    
         wbhelp.init_wandb(
             project_name=cfg['experiment']['project_name'],
             run_name=cfg['experiment']['experiment_name'],
@@ -70,12 +70,14 @@ def main(cfg: DictConfig) -> None:
     
     # get dataloader
     train_dl = DataLoader(
-        train_dataset, batch_size=cfg['distributed_training']['total_batch_size'], shuffle=True, 
-        num_workers=cfg['distributed_training']['workers'], drop_last=True, pin_memory=True
+        train_dataset, batch_size=cfg['distributed_training']['total_batch_size'], 
+        shuffle=True, num_workers=cfg['distributed_training']['workers'], 
+        drop_last=True, pin_memory=True, persistent_workers=True, multiprocessing_context="spawn"
     )
     valid_dl = DataLoader(
-        valid_dataset, batch_size=cfg['distributed_training']['total_batch_size'], shuffle=True, 
-        num_workers=cfg['distributed_training']['workers'], drop_last=True, pin_memory=True
+        valid_dataset, batch_size=cfg['distributed_training']['total_batch_size'], 
+        shuffle=True, num_workers=cfg['distributed_training']['workers'], 
+        drop_last=True, pin_memory=True, persistent_workers=True, multiprocessing_context="spawn"
     )    
     
     # get model

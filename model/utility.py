@@ -30,19 +30,6 @@ def unfreeze(model):
     for param in model.parameters():
         param.requires_grad = True
 
-        layers.append(nn.ReLU())
-        layers.append(nn.Conv2d(16, 3, kernel_size=3, padding=1))
-        layers.append(nn.Sigmoid())
-        
-        self.decoder = nn.Sequential(*layers)
-    
-    def forward(self, x, y):
-        x_encoded = self.encoder(x).pooler_output
-                
-        x_predicted = self.decoder(x_encoded.view(self.batch_size, 1, self.up_state, self.up_state))
-                        
-        return x_predicted, y
-
 
 def load_training_state(accelerator, checkpoint_path, model, optimizer, scheduler):
     state = torch.load(checkpoint_path, map_location=accelerator.device)

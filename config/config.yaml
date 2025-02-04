@@ -6,12 +6,15 @@ loss:
   mse: 0.5
   mae: 0.5
 
+deterministic:
+  from_state: None
+
 distributed_training:
-  num_processes: 2
+  num_processes: 1
   per_gpu_batch_size: 32
   total_batch_size: 32  # per_gpu_batch_size * num_processes
   workers_per_gpu: 6
-  workers: 12  # workers_per_gpu * num_processes
+  workers: 16  # workers_per_gpu * num_processes
   grad_accumulate: 2
 
 optimization:
@@ -37,6 +40,7 @@ dataset:
   root_dir: ERA5/5.65deg
   time_resolution: 6h              # Time between two consecutive samples
   forecast_steps: 1                # Number of autoregressive steps for forecasting
+  timesteps: 1000                  # Number of timesteps for the DIFFUSION model
 
 # Training parameters
 training:

@@ -28,8 +28,11 @@ def sampling_with_cfg(
     accelerator: Accelerator, 
     size: int, 
     condition : torch.Tensor, 
+    force_constants: torch.Tensor,
     guidance_scale: int = 7.5
 ) -> Tuple[torch.Tensor, torch.Tensor]:
+    
+    # TODO: VERIFY THAT I AM ADDING THE FORCINGS CORRECT
     
     c, w, h = 1, size[0], size[1]
     imgs = torch.randn((samples, c, w, h), device=accelerator.device)
@@ -39,7 +42,11 @@ def sampling_with_cfg(
     operator_mask = torch.rand(b, device=condition.device) < 0.5
     
     # Get operator output for the masked samples
-    operator_output = operator(condition, torch.ones(b, device=condition.device), return_dict=False)[0].detach()
+    operator_output = operator(
+        torch.cat([condition, force_constants], dim=1),  # add forcings and constansts. VERIFY THIS WORKS 
+        torch.ones(b, device=condition.device), 
+        return_dict=False
+    )[0].detach()
     
     # Create mixed condition batch
     mixed_condition = torch.where(
@@ -78,21 +85,25 @@ def sampling_with_cfg(
         mu = 1 / torch.sqrt(alpha_t) * (imgs - ((beta_t) / torch.sqrt(1 - alpha_bar_t)) * noise_pred)
         sigma = torch.sqrt(beta_t)
         imgs = mu + sigma * error
-                
+    
     return imgs, mixed_condition
 
 
+# forcings are passed at each step. THIS IS NOT A CONDITION, it is simply additional information
+# this may be changed depending results obtained from training
 def step(
     train_batch: Tuple[torch.Tensor, torch.Tensor, torch.Tensor], 
     model: Module, 
     criterion: Module
 ) -> torch.Tensor:
     
-    clean_images, noisy_images, rand_timesteps = train_batch
+    # TODO: VERIFY THAT I AM ADDING THE FORCINGS CORRECT
+    
+    clean_images, force_constants, noisy_images, rand_timesteps = train_batch
     alpha_bar_t = alpha_bar[rand_timesteps].view(-1, 1, 1, 1)
 
     b, c, h, w = clean_images.shape
-
+    
     null_mask = torch.rand(b, device=clean_images.device) < 0.1
 
     # For non-null samples, decide between clean images and operator output (50% chance each)
@@ -102,16 +113,17 @@ def step(
     # Apply operator to clean images where needed
     with torch.no_grad():
         operator_output = operator(
-            clean_images, torch.ones(b, device=clean_images.device), 
+            torch.cat([clean_images, force_constants], dim=1),  # add forcings along channel dim VERIFY THIS WORKS
+            torch.ones(b, device=clean_images.device), 
             return_dict=False)[0].detach() if operator_mask.any() else clean_images
-
+        
     # Create target images - use operator output where appropriate
     target_images = torch.where(
         operator_mask.view(-1, 1, 1, 1).expand_as(clean_images),
         operator_output,
         clean_images
     )
-
+    
     # Create the final conditioning
     mixed_condition = torch.zeros_like(clean_images)  # Start with zeros (null conditioning)
     # Add clean images where appropriate
@@ -120,6 +132,7 @@ def step(
         clean_images,
         mixed_condition
     )
+    
     # Add operator output where appropriate
     mixed_condition = torch.where(
         operator_mask.view(-1, 1, 1, 1).expand_as(clean_images),
@@ -209,10 +222,9 @@ def training_loop(
         if epoch % sample_delay == 0:
             # Get a batch from validation set
             valid_batch = next(iter(valid))
-            valid_images = valid_batch[0].to(accelerator.device)
+            valid_images, force_constants, _, _ = valid_batch
 
             # Generate samples and get mixed conditions
-            
             samples, mixed_condition = sampling_with_cfg(
                 model=model,
                 samples=valid_images.shape[0],  # Use same batch size as validation
@@ -224,13 +236,13 @@ def training_loop(
                 size=(valid_images.shape[-2], valid_images.shape[-1]),
                 condition=valid_images,
                 operator=operator,
+                force_constants=force_constants,
                 guidance_scale=7.5
             )
 
             # Convert both samples and conditions to numpy for logging
             samples_np = samples.cpu().numpy()
             conditions_np = mixed_condition.cpu().numpy()
-            
 
         accelerator.wait_for_everyone()
         

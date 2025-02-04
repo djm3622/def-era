@@ -10,9 +10,7 @@ from omegaconf import DictConfig
 import torch
 import xarray
 
-
 from data.forcings import time_forcings, toa_radiation
-
 
 class ERA5Dataset(torch.utils.data.Dataset):
     """Prepare and process ERA5 dataset for Pytorch."""
@@ -26,7 +24,7 @@ class ERA5Dataset(torch.utils.data.Dataset):
         dtype=torch.float32,
         cfg: DictConfig = {},
     ) -> None:
-
+        
         features_cfg = cfg.features
         self.eps = 1e-12
         self.root_dir = root_dir
@@ -162,15 +160,26 @@ class ERA5Dataset(torch.utils.data.Dataset):
         )
 
         # Stack all constant features together
-        self.constant_data = (
-            torch.stack(
-                [*normalized_constants, land_sea_mask, lat_rad_grid, lon_rad_grid]
+        if self.forecast_steps == 0:
+            self.constant_data = (
+                torch.stack(
+                    [*normalized_constants, land_sea_mask, lat_rad_grid, lon_rad_grid]
+                )
+                .permute(1, 2, 0)
+                .reshape(self.lat_size, self.lon_size, -1)
+                .unsqueeze(0)
+                .expand(1, -1, -1, -1)
             )
-            .permute(1, 2, 0)
-            .reshape(self.lat_size, self.lon_size, -1)
-            .unsqueeze(0)
-            .expand(self.forecast_steps, -1, -1, -1)
-        )
+        else:
+            self.constant_data = (
+                torch.stack(
+                    [*normalized_constants, land_sea_mask, lat_rad_grid, lon_rad_grid]
+                )
+                .permute(1, 2, 0)
+                .reshape(self.lat_size, self.lon_size, -1)
+                .unsqueeze(0)
+                .expand(self.forecast_steps, -1, -1, -1)
+            )
 
         # Store these for access in forecaster
         self.ds_constants = ds_constants
@@ -183,12 +192,12 @@ class ERA5Dataset(torch.utils.data.Dataset):
         self.dyn_output_features = common_features + list(
             set(output_atmospheric) - set(input_atmospheric)
         )
-
+        
         # Pre-select the features in the right order
         ds_input = ds.sel(features=self.dyn_input_features)
         ds_output = ds.sel(features=self.dyn_output_features)
 
-        # Fetch data
+        # Fetch data 
         self.ds_input = ds_input["data"]
         self.ds_output = ds_output["data"]
 
@@ -219,7 +228,7 @@ class ERA5Dataset(torch.utils.data.Dataset):
         )
 
         # Load arrays into CPU memory
-        with dask.config.set(scheduler='synchronous'):
+        with dask.config.set(scheduler="threads"):
             input_data, true_data = dask.compute(input_data, true_data)
 
         # # Add checks for invalid values
@@ -387,11 +396,18 @@ class ERA5Dataset(torch.utils.data.Dataset):
                 # Get the time forcings
                 if var in forcings_time_ds:
                     var_ds = forcings_time_ds[var]
-                    value = (
-                        torch.tensor(var_ds.data, dtype=self.dtype)
-                        .view(-1, 1, 1, 1)
-                        .expand(self.forecast_steps, self.lat_size, self.lon_size, 1)
-                    )
+                    if self.forecast_steps == 0:
+                        value = (
+                            torch.tensor(var_ds.data, dtype=self.dtype)
+                            .view(-1, 1, 1, 1)
+                            .expand(1, self.lat_size, self.lon_size, 1)
+                        )
+                    else:
+                        value = (
+                            torch.tensor(var_ds.data, dtype=self.dtype)
+                            .view(-1, 1, 1, 1)
+                            .expand(self.forecast_steps, self.lat_size, self.lon_size, 1)
+                        )
                     forcings.append(value)
 
         if len(forcings) > 0:
