@@ -45,7 +45,7 @@ def main(cfg: DictConfig) -> None:
         cfg=cfg,
     )
     
-    sample_x, sample_y, _ = train_dataset[0]
+    sample_x, sample_y, _, _ = train_dataset[0]
     
     in_c, domain_x, domain_y = sample_x.shape
     out_c, _, _ = sample_y.shape

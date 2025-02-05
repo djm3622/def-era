@@ -31,7 +31,10 @@ def main(cfg: DictConfig) -> None:
     save_path = cfg['experiment']['save_path']
 
     # get accelerator
-    accelerator = Accelerator(gradient_accumulation_steps=cfg['distributed_training']['grad_accumulate'])
+    accelerator = Accelerator(
+        gradient_accumulation_steps=cfg['distributed_training']['grad_accumulate'],
+        mixed_precision="fp16"
+    )
     
     # intial setup
     seed = cfg.get("training.seed", 42)  # Default to 42 if not specified
@@ -39,7 +42,7 @@ def main(cfg: DictConfig) -> None:
     
     # logging/checkpointing setup
     if accelerator.is_main_process:
-        #utility.validate_and_create_save_path(cfg['experiment']['save_path'], cfg['experiment']['experiment_name'])    
+        utility.validate_and_create_save_path(cfg['experiment']['save_path'], cfg['experiment']['experiment_name'])    
         wbhelp.init_wandb(
             project_name=cfg['experiment']['project_name'],
             run_name=cfg['experiment']['experiment_name'],
@@ -63,10 +66,15 @@ def main(cfg: DictConfig) -> None:
         cfg=cfg,
     )
     
-    sample_x, sample_y, _ = train_dataset[0]
+    sample_x, sample_y, _, _ = train_dataset[0]
     
-    in_c, domain_x, domain_y = sample_x.shape
-    out_c, _, _ = sample_y.shape
+    if cfg['dataset']['forecast_steps'] == 1:
+        in_c, domain_x, domain_y = sample_x.shape
+        out_c, _, _ = sample_y.shape
+        
+    else:
+        _, in_c, domain_x, domain_y = sample_x.shape
+        _, out_c, _, _ = sample_y.shape
     
     # get dataloader
     train_dl = DataLoader(
@@ -101,17 +109,19 @@ def main(cfg: DictConfig) -> None:
         cfg['training_info']['epochs'], len(train_dl)
     )
     
-    # load from state if needed
-    if cfg['experiment']['from_state'] is not None:
-        model_utility.load_training_state(
-            accelerator, cfg['experiment']['from_state'], 
-            pred_model, optimizer, scheduler
-        )
-    
     # prepare for distributed training
     train_dl, valid_dl, pred_model, optimizer, scheduler = accelerator.prepare(
         train_dl, valid_dl, pred_model, optimizer, scheduler
     )
+    
+    # load from state if needed
+    epoch_start = None
+    if cfg['experiment']['from_state'] is not None:
+        epoch_start = model_utility.load_training_state(
+            accelerator, cfg['experiment']['from_state'], 
+            pred_model, optimizer, scheduler
+        )
+        print(f'State loaded! Resuming training from epoch {epoch_start}.')
     
     # get criterion
     criterion = loss.OperatorLoss(
@@ -131,6 +141,9 @@ def main(cfg: DictConfig) -> None:
         save_path = save_path, 
         optimizer = optimizer, 
         scheduler = scheduler,
+        forecasting_steps = cfg['dataset']['forecast_steps'],
+        gamma = cfg['training']['gamma'],
+        epoch_start = 0 if epoch_start is None else epoch_start,
         loading_bar = True
     )
         

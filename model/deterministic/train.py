@@ -20,12 +20,22 @@ def sample():
 def step(
     batch: tuple, 
     model: Module, 
-    criterion: Module
+    criterion: Module,
+    forecasting_steps: int,
+    gamma: int
 ) -> torch.Tensor:
     
-    x, y, t = batch
-    out = model(x, t.squeeze(-1), return_dict=False)[0]
-    loss = criterion(out, y)
+    x, y, t, _ = batch
+    loss = 0
+    
+    if forecasting_steps == 1:
+        out = model(x, t.squeeze(-1), return_dict=False)[0]
+        loss += criterion(out, y)
+        
+    else:
+        for k in range(forecasting_steps):
+            out = model(x[:, k], t.squeeze(-1), return_dict=False)[0]
+            loss += (gamma**k) * criterion(out, y[:, k])
 
     return loss
     
@@ -41,7 +51,10 @@ def training_loop(
     save_path: str, 
     optimizer: optim, 
     scheduler: optim.lr_scheduler, 
+    epoch_start: int,
     val_delay: int = 1, 
+    forecasting_steps: int = 1,
+    gamma: float = 1.0,
     loading_bar: bool = False,
     config: DictConfig = {}
 ) -> None:    
@@ -59,7 +72,7 @@ def training_loop(
     fetch_time = time.time() - start_time
     accelerator.print(f"Time to fetch first batch: {fetch_time:.2f} seconds")
     
-    for epoch in range(epochs):
+    for epoch in range(epoch_start, epochs):
         model.train()
         train_loss = 0
         
@@ -73,7 +86,10 @@ def training_loop(
         
         for batch_idx, train_batch in enumerate(train_bar):
             with accelerator.accumulate(model):
-                loss = step(train_batch, model, criterion)
+                loss = step(
+                    train_batch, model, criterion,
+                    forecasting_steps, gamma
+                )
                 accelerator.backward(loss)
                 optimizer.step()
                 scheduler.step()

@@ -99,7 +99,7 @@ def step(
     
     # TODO: VERIFY THAT I AM ADDING THE FORCINGS CORRECT
     
-    clean_images, force_constants, noisy_images, rand_timesteps = train_batch
+    clean_images, force_constants, noisy_images, rand_timesteps, _ = train_batch
     alpha_bar_t = alpha_bar[rand_timesteps].view(-1, 1, 1, 1)
 
     b, c, h, w = clean_images.shape
@@ -222,7 +222,7 @@ def training_loop(
         if epoch % sample_delay == 0:
             # Get a batch from validation set
             valid_batch = next(iter(valid))
-            valid_images, force_constants, _, _ = valid_batch
+            valid_images, force_constants, _, _, _ = valid_batch
 
             # Generate samples and get mixed conditions
             samples, mixed_condition = sampling_with_cfg(

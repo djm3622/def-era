@@ -238,6 +238,9 @@ class ERA5Dataset(torch.utils.data.Dataset):
         # Convert to tensors - data comes in [time, lat, lon, features]
         x = torch.tensor(input_data.data, dtype=self.dtype)
         y = torch.tensor(true_data.data, dtype=self.dtype)
+        
+        # calculate and store mean and std to introduce units
+        mu, sigma = self._standard_units(x)
 
         # Apply normalizations : removed for easier autoregression [self._apply_normalization(x, y)]
         x, y = self._standardize(x), self._standardize(y)
@@ -255,10 +258,19 @@ class ERA5Dataset(torch.utils.data.Dataset):
         x_grid = x.permute(0, 3, 1, 2)
         y_grid = y.permute(0, 3, 1, 2)
 
-        return x_grid.squeeze(0), y_grid.squeeze(0), torch.ones(1)
+        return x_grid.squeeze(0), y_grid.squeeze(0), torch.ones(1), (mu, sigma)
 
     def _standardize(self, x):
         return (x - x.mean(dim=(1, 2), keepdim=True)) / x.std(dim=(1, 2), keepdim=True)
+    
+    def _standard_units(self, x):
+        mu = x.mean(dim=(1, 2), keepdim=True)
+        sigma = x.std(dim=(1, 2), keepdim=True)
+            
+        mu = mu.permute(0, 3, 1, 2)
+        sigma = sigma.permute(0, 3, 1, 2)
+        
+        return mu.squeeze(0), sigma.squeeze(0)
     
     def _prepare_normalization(self, ds_input, ds_output):
         """

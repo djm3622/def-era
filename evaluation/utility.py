@@ -24,17 +24,24 @@ def operator_prediction(
 ) -> Tuple[np.ndarray, np.ndarray]:
     
     assert (start_timestep + n_timesteps) < len(valid_dataset), 'The predictions must be within the valid dataset!'
-
+    
     # get only the timesteps indicated in config
     enabled_indices = [
         index 
         for feature, index in feature_dict.items() 
         if feature_switch.get(feature, False)  # Use `get` to avoid KeyError, default to False
     ]
-    
+        
+    # get the mu and sigma for each prediction
+    mu_sigma = [
+        [valid_dataset[start_timestep+i][-1][0][enabled_indices], valid_dataset[start_timestep+i][-1][1][enabled_indices]]
+        for i in range(n_timesteps)
+    ]
+    mu_sigma = np.array(mu_sigma)
+        
     # get ground truth configuration
     ground = [
-        valid_dataset[start_timestep+i][0][:85][enabled_indices] 
+        valid_dataset[start_timestep+i][0][:85][enabled_indices] * mu_sigma[i][1] + mu_sigma[i][0]  # scale
         for i in range(n_timesteps)
     ]
     ground = np.array(ground)
@@ -43,23 +50,24 @@ def operator_prediction(
     pred_model = pred_model.to(device)
     
     # predict
-    x, y, _ = valid_dataset[start_timestep+0]
+    x, y, _, _ = valid_dataset[start_timestep]
     predictions = np.zeros((
         n_timesteps, len(enabled_indices), y.shape[1], y.shape[2])
     )
     
-    predictions[0] = x[:85]
+    predictions[0] = x[:85][enabled_indices] * mu_sigma[0][1] + mu_sigma[0][0]
     x = x.unsqueeze(0).to(device)
 
+    # generate the forecast
     for i in range(n_timesteps-1):
         y = pred_model(x, torch.ones(1).to(device))[0]
         y = train_dataset._standardize(y)
-        predictions[i+1] = y[0][enabled_indices].cpu()
+        predictions[i+1] = y[0][enabled_indices].cpu() * mu_sigma[i+1][1] + mu_sigma[i+1][0]  # scale
 
-        x_f, _, _ = valid_dataset[start_timestep+i+1]  # timestep to steal forcings from (im pretty sure they are exogenous)
+        x_f, _, _, _ = valid_dataset[start_timestep+i+1]  # timestep to steal forcings from (im pretty sure they are exogenous)
         x_f = x_f.unsqueeze(0).to(device)
 
-        x = torch.cat([y, x_f[:, 85:]], dim=1) # concat forcings + constants for next timestep
+        x = torch.cat([y, x_f[:, 85:]], dim=1)  # concat forcings + constants for next timestep
         
     return ground, predictions
 
@@ -88,8 +96,8 @@ def seq_animation(sequence, title, save_root=None):
             coll.remove()
         current_contours.clear()
         
-        # Create new contours (customize levels/colors as needed)
-        contour_set = ax.contour(x_ind, colors='white', linewidths=0.5)
+        # Create new filled contours (customize levels/colors as needed)
+        contour_set = ax.contourf(x_ind, cmap='viridis', levels=20, alpha=0.75)  # Adjust levels and colormap as needed
         current_contours.extend(contour_set.collections)
         
         return [im] + current_contours
@@ -98,7 +106,7 @@ def seq_animation(sequence, title, save_root=None):
     
     print(f'Generating animation.')
     output_path = f'{title}.gif' if save_root is None else os.path.join(save_root, f'{title}.gif')
-    ani.save(output_path, writer='Pillow', fps=5)
+    ani.save(output_path, writer='Pillow', fps=3)
 
 
 def save_trajectory_gifs(

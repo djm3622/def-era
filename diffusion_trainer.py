@@ -64,7 +64,7 @@ def main(cfg: DictConfig) -> None:
     )
         
     # returns sample (85x32x64), forcings+constants (11x32x64), noise (85x32x64), random timestep (1)
-    sample_x, fc, _, _ = train_dataset[0]
+    sample_x, fc, _, _, _ = train_dataset[0]
     
     channels, domain_x, domain_y = sample_x.shape
     fc_channels, _, _ = fc.shape

@@ -39,6 +39,8 @@ def load_training_state(accelerator, checkpoint_path, model, optimizer, schedule
     optimizer.load_state_dict(state['optimizer_state_dict'])
     
     scheduler.load_state_dict(state['scheduler_state_dict'])
+    
+    return int(state['epoch'])
         
         
 def save_training_state(accelerator, epoch, model, optimizer, scheduler, output_dir):
