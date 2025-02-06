@@ -68,8 +68,8 @@ def init_wandb(
 def log_losses(
     train_loss: float,
     valid_loss: float,
+    lookup: dict = None,
     step: Optional[int] = None,
-    epoch: Optional[int] = None,
     samples: Optional[np.ndarray] = None,
     conditions: Optional[np.ndarray] = None
 ) -> None:
@@ -84,23 +84,43 @@ def log_losses(
     # Add step/epoch info if provided
     if step is not None:
         log_dict['step'] = step
-    if epoch is not None:
-        log_dict['epoch'] = epoch
         
-    # Log samples and conditions if provided
-    if samples is not None and conditions is not None:
-        # Create separate lists for samples and conditions
-        sample_list = [
-            wandb.Image(sample, caption=f"Sample {idx} at epoch {epoch}")
-            for idx, sample in enumerate(samples)
-        ]
-        condition_list = [
-            wandb.Image(condition, caption=f"Condition {idx} at epoch {epoch}")
-            for idx, condition in enumerate(conditions)
-        ]
+    # use this to get the variables of interest
+    interests = [
+        'geopotential_h500', 'geopotential_h850', 
+        'temperature_h500', 'temperature_h850',
+        'wind_x_h500', 'wind_x_h850', 'total_precipitation_6hr'
+    ]
+    sample_images, condition_images = [], []
+    
+    # Log samples and conditions if provided    
+    if samples is not None and lookup is not None:
+        # Process samples
+        for sample_idx, sample in enumerate(samples):
+            for interest in interests:
+                channel_idx = lookup[interest]
+                # Assuming channel-first format (C, H, W)
+                channel_data = sample[channel_idx]
+                img = wandb.Image(
+                    channel_data,
+                    caption=f"Sample {sample_idx} | {interest} | Epoch {step}"
+                )
+                sample_images.append(img)
+
+        # Process conditions
+        for cond_idx, condition in enumerate(conditions):
+            for interest in interests:
+                channel_idx = lookup[interest]
+                # Assuming channel-first format (C, H, W)
+                channel_data = condition[channel_idx]
+                img = wandb.Image(
+                    channel_data,
+                    caption=f"Condition {cond_idx} | {interest} | Epoch {step}"
+                )
+                condition_images.append(img)
         
-        log_dict['generated_samples'] = sample_list
-        log_dict['conditions'] = condition_list
+        log_dict['generated_samples'] = sample_images
+        log_dict['conditions'] = condition_images
     
     wandb.log(log_dict)
     

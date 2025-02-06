@@ -36,9 +36,11 @@ def load_training_state(accelerator, checkpoint_path, model, optimizer, schedule
 
     accelerator.unwrap_model(model).load_state_dict(state['model_state_dict'])
     
-    optimizer.load_state_dict(state['optimizer_state_dict'])
+    if optimizer is not None:
+        optimizer.load_state_dict(state['optimizer_state_dict'])
     
-    scheduler.load_state_dict(state['scheduler_state_dict'])
+    if scheduler is not None:
+        scheduler.load_state_dict(state['scheduler_state_dict'])
     
     return int(state['epoch'])
         

@@ -1,11 +1,11 @@
 device:
   preference: 'cuda'
-  index: 3
+  index: 0
   
 evaluation:
   start_time: 10
   iterations: 30
-  save_path: 'outputs/temp_full_restart/evaluation_data/'
+  save_path: 'outputs/temp_full_auto/evaluation_data/'
   
   pressure_levels:
     50: True
@@ -53,7 +53,7 @@ experiment:
   project_name: "DEF"
   experiment_name: "init-op"
   save_path: "outputs/"
-  from_checkpoint: "checkpoint/operator/op-fulltrain-02/checkpoint_epoch_6.pt"
+  from_checkpoint: "checkpoint/operator/op-forecast-08/checkpoint_epoch_37.pt"
   
 # Input dataset
 dataset:
@@ -68,8 +68,8 @@ training:
     end_date: 2019-12-31           # End date for the training dataset (YYYY-MM-DD)
 
   validation_dataset:
-    start_date: 2022-01-01         # Start date for the validation dataset (YYYY-MM-DD)
-    end_date: 2023-12-31           # End date for the validation dataset (YYYY-MM-DD)
+    start_date: 2020-01-01         # Start date for the validation dataset (YYYY-MM-DD)
+    end_date: 2020-12-31           # End date for the validation dataset (YYYY-MM-DD)
 
   variable_loss_weights:
     atmospheric:

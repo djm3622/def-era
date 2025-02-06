@@ -16,7 +16,6 @@ import utils.wandb_helper as wandb_helper
 def sample():
     pass
 
-
 def step(
     batch: tuple, 
     model: Module, 
@@ -140,7 +139,10 @@ def training_loop(
         
         with torch.no_grad():
             for valid_batch in valid_bar:
-                loss = step(valid_batch, model, criterion)
+                loss = step(
+                    valid_batch, model, criterion,
+                    forecasting_steps, gamma
+                )
                 val_loss += loss.item()
                 
                 if loading_bar:

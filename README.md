@@ -2,21 +2,22 @@
 
 Reposity for my capstone project. Much of the code is adapted from ECCC's repository for PARADIS (not the model, just the data acquisition and loading). 
 
-## TODO (nearing done)
-1. Add units (mean+std) to the returned from the original and diffusion datasets.
-2. Update deterministic_eval to use these calculated values instead.
-3. Updated deterministic_trainer, diffusion_trainer, model.determinstic.train, and model.diffusion.train to account for extra info. They don't need to use them but return counts will now be changed.
+## TODO 01 (DONE)
+1. Add units (mean+std) to the returned from the original and diffusion datasets. (DONE)
+2. Update deterministic_eval to use these calculated values instead. (DONE)
+3. Updated deterministic_trainer, diffusion_trainer, model.determinstic.train, and model.diffusion.train to account for extra info. They don't need to use them but return counts will now be changed. (DONE)
 
-**If all goes well and the diffusion model and operator fit well.**
-1. Fit full operator, same size data as used for diffusion model.
-2. Train diffusion model.
-3. Setup eval pipelines to determine best solver (DDIM, DPM++, etc.) along with parameters (eta, guidance, etc.)
+## TODO 02 (IN PROGRESS)
+1. Fit full operator, same size data as used for diffusion model. (DONE. best as I could fit the model. performance is mediocure but likely the best for the small dataset + small model. performs better than climatology and persistance in short-term predictions, good. if the diffusion model performs well it may lead to a significant improvement, using the mean)
+2. Train diffusion model. (IN PROGRESS)
+3. Setup eval pipelines to determine best solver (DDIM, DPM++, etc.) along with parameters (eta, guidance, etc.) (IN PROGRESS)
   1. This requires setting up various metrics and LOT OF TIME.
 3. Setup traditional techniques. (SV, random/transform)
   1. Not sure if will need to do this since I will have units.
 4. Determine strengths and weaknesses.
+5. Use graphcast (small) to see the transferability. (even though the diffusion model will likely be weak)
 
-**If all goes well...**
+## TODO 03
 1. Possible extensions.
   1. Action-value function for guidance parameter.
   2. Tree-based forecasting by learning a state value function associated with uncertainty.

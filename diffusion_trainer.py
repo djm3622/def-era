@@ -8,9 +8,10 @@ import random
 import numpy as np
 from safetensors.torch import load_file
 
-import data.era5__diffusion_dataset as data
+import data.era5_diffusion_dataset as data
 from torch.utils.data import DataLoader
 
+import model.deterministic.model as model_det
 import model.diffusion.model as model
 import model.schedulers as schedulers
 import model.optimizers as optimizers
@@ -31,7 +32,10 @@ def main(cfg: DictConfig) -> None:
     save_path = cfg['experiment']['save_path']
 
     # get accelerator
-    accelerator = Accelerator(gradient_accumulation_steps=cfg['distributed_training']['grad_accumulate'])
+    accelerator = Accelerator(
+        gradient_accumulation_steps=cfg['distributed_training']['grad_accumulate'],
+        mixed_precision="fp16"
+    )
     
     # intial setup
     seed = cfg.get("training.seed", 42)  # Default to 42 if not specified
@@ -52,19 +56,19 @@ def main(cfg: DictConfig) -> None:
         root_dir=cfg['dataset']['root_dir'],
         start_date=cfg['training']['dataset']['start_date'],
         end_date=cfg['training']['dataset']['end_date'],
-        timesteps=cfg['dataset']['timesteps'],
+        timesteps=cfg['dataset']['timestep'],
         cfg=cfg,
     )
     valid_dataset = data.ERA5DiffusionDataset(
         root_dir=cfg['dataset']['root_dir'],
         start_date=cfg['training']['validation_dataset']['start_date'],
         end_date=cfg['training']['validation_dataset']['end_date'],
-        timesteps=cfg['dataset']['timesteps'],
+        timesteps=cfg['dataset']['timestep'],
         cfg=cfg,
     )
         
     # returns sample (85x32x64), forcings+constants (11x32x64), noise (85x32x64), random timestep (1)
-    sample_x, fc, _, _, _ = train_dataset[0]
+    sample_x, fc, _, _ = train_dataset[0]
     
     channels, domain_x, domain_y = sample_x.shape
     fc_channels, _, _ = fc.shape
@@ -73,12 +77,12 @@ def main(cfg: DictConfig) -> None:
     train_dl = DataLoader(
         train_dataset, batch_size=cfg['distributed_training']['total_batch_size'], 
         shuffle=True, num_workers=cfg['distributed_training']['workers'], 
-        drop_last=True, pin_memory=True, persistent_workers=True, multiprocessing_context="spawn"
+        drop_last=True, pin_memory=True, persistent_workers=True
     )
     valid_dl = DataLoader(
         valid_dataset, batch_size=cfg['distributed_training']['total_batch_size'], 
         shuffle=True, num_workers=cfg['distributed_training']['workers'], 
-        drop_last=True, pin_memory=True, persistent_workers=True, multiprocessing_context="spawn"
+        drop_last=True, pin_memory=True, persistent_workers=True
     )    
 
     # get diffusion model
@@ -94,14 +98,10 @@ def main(cfg: DictConfig) -> None:
         model_utility.load_model_weights(diffusion_model, cfg['experiment']['from_checkpoint'])
     
     # get determinsitic model
-    pred_model = model.get_unet_based_model(
+    pred_model = model_det.get_unet_based_model(
         domain_x, domain_y, channels+fc_channels, 
         channels, cfg 
     )
-    
-    # deterministic force load from checkpoint
-    assert cfg['deterministc']['from_checkpoint'] is not None, 'Deterministic checkpoint is required!'
-    model_utility.load_model_weights(pred_model, cfg['deterministc']['from_checkpoint'])
     
     # get optimizer
     optimizer = optimizers.get_adamw(diffusion_model, cfg['optimization']['lr'])
@@ -112,26 +112,39 @@ def main(cfg: DictConfig) -> None:
         cfg['training_info']['epochs'], len(train_dl)
     )
     
-    # load from state if needed
-    if cfg['experiment']['from_state'] is not None:
-        model_utility.load_training_state(
-            accelerator, cfg['experiment']['from_state'], 
-            diffusion_model, optimizer, scheduler
-        )
-    
     # prepare for distributed training
     train_dl, valid_dl, diffusion_model, pred_model, optimizer, scheduler = accelerator.prepare(
         train_dl, valid_dl, diffusion_model, pred_model, optimizer, scheduler
     )
     
+    # load from state if needed
+    epoch_start = None
+    if cfg['experiment']['from_state'] is not None:
+        epoch_start = model_utility.load_training_state(
+            accelerator, cfg['experiment']['from_state'], 
+            diffusion_model, optimizer, scheduler
+        )
+        print(f'State loaded! Resuming training from epoch {epoch_start}.')
+    
+    # deterministic force load from checkpoint
+    assert cfg['deterministic']['from_state'] is not None, 'Deterministic state is required!'
+    model_utility.load_training_state(
+        accelerator, cfg['deterministic']['from_state'], 
+        pred_model, None, None
+    )
+    print('Deterministic loaded!')
+    
     # get criterion
     criterion = loss.get_diffusion_loss()
+    
+    # get lookup for wandb logging
+    feature_dict = model_utility.get_dict_of_features(cfg)
 
     # distribute training
     training.training_loop(
         accelerator = accelerator, 
         train = train_dl, 
-        vali = valid_dl, 
+        valid = valid_dl, 
         model = diffusion_model, 
         operator = pred_model, 
         epochs = cfg['training_info']['epochs'], 
@@ -139,9 +152,11 @@ def main(cfg: DictConfig) -> None:
         save_path = cfg['experiment']['save_path'], 
         optimizer = optimizer, 
         scheduler = scheduler, 
-        t_timesteps: cfg['training_info']['timesteps'], 
-        val_delay = cfg['training_info']['validation_delay'], 
+        t_timesteps = cfg['dataset']['timestep'], 
+        lookup = feature_dict,
+        sample_delay = cfg['training_info']['validation_delay'], 
         loading_bar = True,
+        epoch_start = 0 if epoch_start is None else epoch_start,
         config = cfg
     )
         

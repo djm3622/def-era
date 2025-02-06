@@ -1,7 +1,7 @@
 import torch
 import torch.optim as optim
-from tqdm.notebook import tqdm
-from wandb_helper import log_losses
+from tqdm.auto import tqdm  
+from utils.wandb_helper import log_losses
 import random
 import torch
 import numpy as np
@@ -13,6 +13,9 @@ from accelerate import Accelerator
 from torch.utils.data import DataLoader
 from torch.nn import Module
 import torch.optim as optim
+import time
+
+from model.utility import save_training_state
 
 
 # class conditional sampling
@@ -26,16 +29,19 @@ def sampling_with_cfg(
     alpha: torch.Tensor, 
     alpha_bar: torch.Tensor, 
     accelerator: Accelerator, 
-    size: int, 
-    condition : torch.Tensor, 
+    size: torch.Tensor, 
+    condition: torch.Tensor, 
     force_constants: torch.Tensor,
     guidance_scale: int = 7.5
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    
-    # TODO: VERIFY THAT I AM ADDING THE FORCINGS CORRECT
-    
-    c, w, h = 1, size[0], size[1]
+        
+    b, c, w, h = size
     imgs = torch.randn((samples, c, w, h), device=accelerator.device)
+    
+    # fix condition and forcings if samples less than input batch
+    if b != samples:
+        condition = condition[:samples]
+        force_constants = force_constants[:samples]
     
     # Create the mixed conditioning batch
     b = condition.shape[0]
@@ -43,7 +49,7 @@ def sampling_with_cfg(
     
     # Get operator output for the masked samples
     operator_output = operator(
-        torch.cat([condition, force_constants], dim=1),  # add forcings and constansts. VERIFY THIS WORKS 
+        torch.cat([condition, force_constants], dim=1),  # add forcings and constansts
         torch.ones(b, device=condition.device), 
         return_dict=False
     )[0].detach()
@@ -58,7 +64,15 @@ def sampling_with_cfg(
     # Create full batch with conditioned and unconditioned
     batch_cond = torch.cat([mixed_condition, torch.zeros_like(mixed_condition)])    
     
-    for step in range(t_timesteps-1, -1, -1):
+    sample_bar = tqdm(
+        range(t_timesteps-1, -1, -1), 
+        desc=f'Generating Samples', 
+        leave=False,
+        disable=not (accelerator.is_main_process),
+        mininterval=1.0  # Update more frequently
+    )
+    
+    for step in sample_bar:
         # Create double-sized batch of images for parallel conditioned/unconditioned prediction
         double_imgs = torch.cat([imgs, imgs], dim=0)
         
@@ -85,7 +99,7 @@ def sampling_with_cfg(
         mu = 1 / torch.sqrt(alpha_t) * (imgs - ((beta_t) / torch.sqrt(1 - alpha_bar_t)) * noise_pred)
         sigma = torch.sqrt(beta_t)
         imgs = mu + sigma * error
-    
+                            
     return imgs, mixed_condition
 
 
@@ -93,13 +107,13 @@ def sampling_with_cfg(
 # this may be changed depending results obtained from training
 def step(
     train_batch: Tuple[torch.Tensor, torch.Tensor, torch.Tensor], 
-    model: Module, 
-    criterion: Module
+    model: Module,
+    operator: Module, 
+    criterion: Module,
+    alpha_bar: torch.Tensor
 ) -> torch.Tensor:
-    
-    # TODO: VERIFY THAT I AM ADDING THE FORCINGS CORRECT
-    
-    clean_images, force_constants, noisy_images, rand_timesteps, _ = train_batch
+        
+    clean_images, force_constants, noisy_images, rand_timesteps = train_batch
     alpha_bar_t = alpha_bar[rand_timesteps].view(-1, 1, 1, 1)
 
     b, c, h, w = clean_images.shape
@@ -113,7 +127,7 @@ def step(
     # Apply operator to clean images where needed
     with torch.no_grad():
         operator_output = operator(
-            torch.cat([clean_images, force_constants], dim=1),  # add forcings along channel dim VERIFY THIS WORKS
+            torch.cat([clean_images, force_constants], dim=1),  # add forcings along channel dim 
             torch.ones(b, device=clean_images.device), 
             return_dict=False)[0].detach() if operator_mask.any() else clean_images
         
@@ -161,8 +175,10 @@ def training_loop(
     optimizer: optim, 
     scheduler: optim.lr_scheduler, 
     t_timesteps: int, 
-    val_delay: int = 1, 
-    loading_bar: bool = False,
+    lookup: dict,
+    sample_delay: int = 1, 
+    loading_bar: bool = True,
+    epoch_start: int = 0,
     config: DictConfig = {}
 ) -> None:
     
@@ -186,7 +202,7 @@ def training_loop(
     # use (states + operator output) as as next_state prediction
     
     model.train()
-    for epoch in range(epochs):
+    for epoch in range(epoch_start, epochs):
         train_loss = 0
         
         train_bar = tqdm(
@@ -196,10 +212,13 @@ def training_loop(
             disable=not (loading_bar and accelerator.is_main_process),
             mininterval=1.0  # Update more frequently
         )
-        
+                
         for batch_idx, train_batch in enumerate(train_bar):
             with accelerator.accumulate(model):
-                loss = step(train_batch, model, criterion)
+                loss = step(
+                    train_batch, model, operator, 
+                    criterion, alpha_bar
+                )
                 accelerator.backward(loss)
                 optimizer.step()
                 scheduler.step()
@@ -211,7 +230,7 @@ def training_loop(
                     train_loss=loss.item(), 
                     lr=scheduler.get_last_lr()[0]
                 )
-                                                            
+                                                                            
         train_loss /= len(train)
         gathered_train_loss = accelerator.gather(torch.tensor([train_loss]).to(accelerator.device)).mean().item()
         accelerator.print(f'Epoch {epoch+1}/{epochs}, Train Loss: {gathered_train_loss}')
@@ -222,18 +241,19 @@ def training_loop(
         if epoch % sample_delay == 0:
             # Get a batch from validation set
             valid_batch = next(iter(valid))
-            valid_images, force_constants, _, _, _ = valid_batch
+            valid_images, force_constants, _, _ = valid_batch
+            samples = 5
 
             # Generate samples and get mixed conditions
             samples, mixed_condition = sampling_with_cfg(
                 model=model,
-                samples=valid_images.shape[0],  # Use same batch size as validation
+                samples=samples,  # Use same batch size as validation
                 t_timesteps=t_timesteps,
                 beta=beta,
                 alpha=alpha,
                 alpha_bar=alpha_bar,
                 accelerator=accelerator,
-                size=(valid_images.shape[-2], valid_images.shape[-1]),
+                size=valid_images.shape,
                 condition=valid_images,
                 operator=operator,
                 force_constants=force_constants,
@@ -252,7 +272,8 @@ def training_loop(
                 valid_loss=None,
                 step=epoch,
                 samples=samples_np,
-                conditions=conditions_np
+                conditions=conditions_np,
+                lookup=lookup
             )
             
         accelerator.wait_for_everyone()
@@ -263,7 +284,6 @@ def training_loop(
             model=model,
             optimizer=optimizer,
             scheduler=scheduler,
-            rng_states=None,  # Will be collected inside the function
             output_dir=save_path+'states/'
         )
             

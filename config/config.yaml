@@ -7,14 +7,14 @@ loss:
   mae: 0.5
 
 deterministic:
-  from_state: None
+  from_state: "checkpoint/operator/op-forecast-08/checkpoint_epoch_37.pt"
 
 distributed_training:
   num_processes: 1
-  total_batch_size: 16  # per_gpu_batch_size * num_processes
+  total_batch_size: 32  # per_gpu_batch_size * num_processes
   workers_per_gpu: 6
-  workers: 16  # workers_per_gpu * num_processes
-  grad_accumulate: 4
+  workers: 12  # workers_per_gpu * num_processes
+  grad_accumulate: 2
 
 optimization:
   base_lr: 1.0e-5
@@ -22,23 +22,23 @@ optimization:
   lr: 1.414e-5  # base_lr * sqrt(total_batch_size / per_gpu_batch_size)
 
 training_info:
-  epochs: 60
-  validation_delay: 1
+  epochs: 300
+  validation_delay: 10
   patience: 10
 
 experiment:
   project_name: "DEF"
-  experiment_name: "op-forecast-08"
-  save_path: "/data/users/jupyter-dam724/def-era/checkpoint/operator/op-forecast-08/"
+  experiment_name: "init-diffusion"
+  save_path: "/data/users/jupyter-dam724/def-era/checkpoint/diffusion/init-diffusion/"
   from_checkpoint: null
-  from_state: "checkpoint/operator/op-fulltrain-01/checkpoint_epoch_33.pt"
+  from_state: null
 
 # Input dataset
 dataset:
   root_dir: ERA5/5.65deg
   time_resolution: 6h              # Time between two consecutive samples
-  forecast_steps: 4                # Number of autoregressive steps for forecasting
-  timesteps: 1000                  # Number of timesteps for the DIFFUSION model
+  forecast_steps: 1                # Number of autoregressive steps for forecasting
+  timestep: 1000                   # Number of timesteps for the DIFFUSION model
 
 # Training parameters
 training:

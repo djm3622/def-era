@@ -41,7 +41,7 @@ class ERA5DiffusionDataset(ERA5Dataset):
         input_data = self.ds_input.isel(time=slice(ind, ind + 1))
 
         # Load arrays into CPU memory
-        with dask.config.set(scheduler="threads"):
+        with dask.config.set(scheduler="single-threaded"):
             input_data = dask.compute(input_data)[0]
                                       
         # # Add checks for invalid values
