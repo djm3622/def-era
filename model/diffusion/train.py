@@ -220,6 +220,10 @@ def training_loop(
                     criterion, alpha_bar
                 )
                 accelerator.backward(loss)
+                
+                if accelerator.sync_gradients:
+                    accelerator.clip_grad_norm_(model.parameters(), 1.0)
+                    
                 optimizer.step()
                 scheduler.step()
                 optimizer.zero_grad()

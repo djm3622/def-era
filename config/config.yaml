@@ -28,10 +28,10 @@ training_info:
 
 experiment:
   project_name: "DEF"
-  experiment_name: "init-diffusion"
-  save_path: "/data/users/jupyter-dam724/def-era/checkpoint/diffusion/init-diffusion/"
+  experiment_name: "init-diffusion-restart"
+  save_path: "/data/users/jupyter-dam724/def-era/checkpoint/diffusion/init-diffusion-restart/"
   from_checkpoint: null
-  from_state: null
+  from_state: "checkpoint/diffusion/init-diffusion/states/checkpoint_epoch_57.pt"
 
 # Input dataset
 dataset:
