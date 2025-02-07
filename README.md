@@ -9,7 +9,7 @@ Reposity for my capstone project. Much of the code is adapted from ECCC's reposi
 
 ## TODO 02 (IN PROGRESS)
 1. Fit full operator, same size data as used for diffusion model. (DONE. best as I could fit the model. performance is mediocure but likely the best for the small dataset + small model. performs better than climatology and persistance in short-term predictions, good. if the diffusion model performs well it may lead to a significant improvement, using the mean)
-2. Train diffusion model. (IN PROGRESS)
+2. Train diffusion model. (IN PROGRESS. restarted to avoid the down projection previously overlooked)
 3. Setup eval pipelines to determine best solver (DDIM, DPM++, etc.) along with parameters (eta, guidance, etc.) (IN PROGRESS)
   1. This requires setting up various metrics and LOT OF TIME.
 3. Setup traditional techniques. (SV, random/transform)
