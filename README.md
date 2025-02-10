@@ -23,6 +23,13 @@ Reposity for my capstone project. Much of the code is adapted from ECCC's reposi
   2. Tree-based forecasting by learning a state value function associated with uncertainty.
 2. See how conformal prediction could be used autoregressively.
 
+## Dependencies
+Necessary python packages can be installed using **pip**:
+
+```
+pip install -r requirements.txt --break-system-packages
+```
+
 ## Usage
 ### Configurations
 There are two primary configuration files, the `config.yaml` and `accelerator.yaml`, both located in the `config/` directory.
