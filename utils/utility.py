@@ -2,6 +2,8 @@ import os
 import torch
 import numpy as np
 import random
+from typing import Tuple
+
 
 def set_device(device_pref, device_ind):
     device = None
@@ -119,3 +121,18 @@ def plot_state_with_uncertainty(state, uncertainty, cmap='gray', uncertainty_alp
     
 def standardize(imgs):
     return (imgs - imgs.mean(dim=(-2, -1), keepdim=True)) / imgs.std(dim=(-2, -1), keepdim=True)
+
+
+def get_alpha_beta_bar(
+    beta_start: float,
+    beta_end: float,
+    timesteps: int,
+    device: torch.device
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    
+    beta = torch.linspace(1e-4, 0.02, 1000, device=device)
+    alpha = 1.0 - beta
+    alpha_bar = torch.cumprod(alpha, dim=0)
+    
+    return beta, alpha, alpha_bar
+    

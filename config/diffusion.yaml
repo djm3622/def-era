@@ -1,30 +1,155 @@
 device:
   preference: 'cuda'
-  index: null
+  index: 0
+  
+deterministic:
+  from_state: "checkpoint/operator/op-forecast-08/checkpoint_epoch_37.pt"
+  
+diffusion:
+  from_state: "checkpoint/diffusion/diffusion-larger/states/checkpoint_epoch_240.pt"
+  
+evaluation:
+  start_time: 10
+  iterations: 30
+  save_path: 'outputs/temp_full_auto/evaluation_data/'
+  
+  samples: 32
+  sampler: "DPM++"
+  walks: 1
+  
+  # general
+  guidance_scale: 0.5
+  corrector: True
+  num_steps: 25
+  
+  # ddim specific
+  eta: 0.01
+  
+  # dpm++ specific
+  solver_order: 2
+  prediction_type: "epsilon"
+  algorithm_type: "dpmsolver++"
+  
+  pressure_levels:
+    50: True
+    100: True
+    150: True
+    200: True
+    250: True
+    300: True
+    400: True
+    500: True
+    600: True
+    700: True
+    850: True
+    925: True
+    1000: True
 
-distributed_training:
-  num_processes: 3
-  per_gpu_batch_size: 3
-  total_batch_size: 9  # per_gpu_batch_size * num_processes
-  workers_per_gpu: 6
-  training_workers: 18  # workers_per_gpu * num_processes
-  validation_workers: 18  # workers_per_gpu * num_processes
-  grad_accumulate: 8
+  base:
+    atmospheric:
+      geopotential: True
+      wind_x: True
+      wind_y: True
+      wind_z: True
+      specific_humidity: True
+      temperature: True
+    surface:
+      wind_x_10m: True
+      wind_y_10m: True
+      2m_temperature: True
+      mean_sea_level_pressure: True
+      surface_pressure: True
+      total_column_water: True
+      total_precipitation_6hr: True
+  
+# Input dataset
+dataset:
+  root_dir: ERA5/5.65deg
+  time_resolution: 6h              # Time between two consecutive samples
+  forecast_steps: 1                # Number of autoregressive steps for forecasting
+  timestep: 1000
+  
+  beta_start: 1e-4
+  beta_end: 0.02
 
-optimization:
-  base_lr: 1.0e-5
-  max_lr: 1.0e-4
-  lr: 1.732e-5  # base_lr * sqrt(total_batch_size / per_gpu_batch_size)
-
+# Training parameters
 training:
-  epochs: 100
-  timesteps: 4000
-  loss_type: "simple"
-  sample_delay: 10
+  dataset:
+    start_date: 2000-01-01         # Start date for the training dataset (YYYY-MM-DD)
+    end_date: 2019-12-31           # End date for the training dataset (YYYY-MM-DD)
 
-experiment:
-  project_name: "DEF"
-  experiment_name: "init-conditional"
-  save_path: "/data/users/jupyter-dam724/def-era/checkpoint/diffusion/init-conditional/"
-  operator_checkpoint: "/data/users/jupyter-dam724/def-era/checkpoint/state/..."
-  state_checkpoint: null
+  validation_dataset:
+    start_date: 2020-01-01         # Start date for the validation dataset (YYYY-MM-DD)
+    end_date: 2020-12-31           # End date for the validation dataset (YYYY-MM-DD)
+
+  variable_loss_weights:
+    atmospheric:
+      wind_x: 1.0
+      wind_y: 1.0
+      wind_z: 1.0
+      geopotential: 1.0
+      specific_humidity: 1.0
+      temperature: 1.0
+    surface:
+      wind_x_10m: 0.1
+      wind_y_10m: 0.1
+      2m_temperature: 0.1
+      mean_sea_level_pressure: 0.1
+      surface_pressure: 0.1
+      total_column_water: 0.1
+      total_precipitation_6hr: 0.1
+
+features:
+  pressure_levels:
+    - 50
+    - 100
+    - 150
+    - 200
+    - 250
+    - 300
+    - 400
+    - 500
+    - 600
+    - 700
+    - 850
+    - 925
+    - 1000
+
+  base:
+    atmospheric:
+      - geopotential
+      - wind_x
+      - wind_y
+      - wind_z
+      - specific_humidity
+      - temperature
+    surface:
+      - wind_x_10m
+      - wind_y_10m
+      - 2m_temperature
+      - mean_sea_level_pressure
+      - surface_pressure
+      - total_column_water
+      - total_precipitation_6hr
+
+  input:
+    atmospheric: ${features.base.atmospheric}
+    surface: ${features.base.surface}
+    forcings:
+      - toa_incident_solar_radiation
+      - sin_time_of_day
+      - cos_time_of_day
+      - sin_year_progress
+      - cos_year_progress
+    constants:
+      - geopotential_at_surface
+      - land_sea_mask
+      - slope_of_sub_gridscale_orography
+      - standard_deviation_of_orography
+      - latitude
+      - longitude
+
+  output:
+    atmospheric: ${features.base.atmospheric}
+    surface: ${features.base.surface}
+
