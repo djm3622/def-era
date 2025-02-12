@@ -3,6 +3,7 @@ ERA5/
 outputs/
 wandb/
 testing.ipynb
+config_temp.yaml
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

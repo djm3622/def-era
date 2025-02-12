@@ -9,13 +9,12 @@ Reposity for my capstone project. Much of the code is adapted from ECCC's reposi
 
 ## TODO 02 (IN PROGRESS)
 1. Fit full operator, same size data as used for diffusion model. (DONE. best as I could fit the model. performance is mediocure but likely the best for the small dataset + small model. performs better than climatology and persistance in short-term predictions, good. if the diffusion model performs well it may lead to a significant improvement, using the mean)
-2. Train diffusion model. (IN PROGRESS. restarted to avoid the down projection previously overlooked)
-3. Setup eval pipelines to determine best solver (DDIM, DPM++, etc.) along with parameters (eta, guidance, etc.) (IN PROGRESS)
+2. Train diffusion model. (DONE. restarted to avoid the down projection previously overlooked)
+3. Setup eval pipelines to determine best solver (DDIM, DPM++, etc.) along with parameters (eta, guidance, etc.) (DONE)
   1. This requires setting up various metrics and LOT OF TIME.
-3. Setup traditional techniques. (SV, random/transform)
+4. Write `bash` script to automate the tuning procedure. (DONE)
   1. Not sure if will need to do this since I will have units.
-4. Determine strengths and weaknesses.
-5. Use graphcast (small) to see the transferability. (even though the diffusion model will likely be weak)
+4. Determine strengths and weaknesses. (IN-PROGRESS)
 
 ## TODO 03
 1. Possible extensions.
@@ -69,9 +68,14 @@ This script will write trajectory .gifs and RMSE plots for selected variables an
 
 #### diffusion model
 
-For evaluating the diffusion model:
+For evaluating a single configuration of the diffusion model:
 ```
 python diffusion_eval.py [override_args]
+```
+
+For evaluating an array of configurations, such as `guidance, eta, solver steps`:
+```
+./scripts/tune.sh
 ```
 
 #### Dataset 

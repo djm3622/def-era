@@ -81,7 +81,7 @@ def get_dpm(
         'model': model, 
         'solver': get_solver(
             num_train_timesteps = cfg['dataset']['timestep'],
-            trained_betas = beta.clone().detach(),
+            trained_betas = beta.cpu().clone().detach(),
             solver_order = cfg['evaluation']['solver_order'],
             prediction_type = cfg['evaluation']['prediction_type'],
             algorithm_type = cfg['evaluation']['algorithm_type']

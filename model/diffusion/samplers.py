@@ -114,7 +114,7 @@ def sampling_with_cfg_dpm(
         double_imgs = torch.cat([imgs, imgs], dim=0)
         
         error = torch.randn_like(imgs) if step > 1 else torch.zeros_like(imgs)
-        timesteps = torch.ones(condtion.shape[0], dtype=torch.int, device=device) * step
+        timesteps = torch.ones(condition.shape[0], dtype=torch.int, device=device) * step
         double_timesteps = torch.concat([timesteps, timesteps], dim=0)
         
         # Get both conditioned and unconditioned predictions

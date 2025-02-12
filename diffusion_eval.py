@@ -1,38 +1,3 @@
-"""
-TODO
-diffusion evalatution over 30 timesteps for 32 samples
-
-sampling strategies (solving time per generation for each)
-1. DDPM (guidance)
-2. DDIM (guidance, eta, num_steps)
-3. DPM++ (guidance, num_steps)
-
-metric evaluations
-1. CPRS
-2. Energy
-3. RMSE from ground (deterministic, 1st member, mean)
-
-graphical evaluations
-1. std of each channell at each timestep
-
-replication
-1. save the full history in marked torch files
-
-extra:
-1. using xN iterative walks
-
-
-FLOW (saving full history)
-
-1. get deterministic 
-advance and save
-
-2. diffusion
-select sampler -> start time -> xN for iterative walks ->
-end time when done -> log all metrics -> log graphics ->
-save data for replication
-"""
-
 import logging
 import hydra
 from omegaconf import DictConfig, OmegaConf
@@ -66,6 +31,7 @@ def main(cfg: DictConfig) -> None:
         
     # reused variables
     save_path = cfg['evaluation']['save_path']
+    os.makedirs(save_path, exist_ok=True)
     
     # get deterministic dataset
     train_dataset = det_data.ERA5Dataset(
@@ -170,36 +136,35 @@ def main(cfg: DictConfig) -> None:
         cfg = cfg
     )
     
-    
     # metrics
     probalistic_metrics = {
-        'energy': EnergyScore,
-        'crps': CRPS,
-        'mean-rmse': EnsembleMeanRMSE
+        'energy': EnergyScore(),
+        'crps': CRPS(),
+        'mean-rmse': EnsembleMeanRMSE()
     }
     deterministic_metrics = {
-        'rmse': lambda x, y, value: np.sqrt(np.mean(x[:, value] - y[:, value]**2, axis=(1, 2))) # calculate rmse
+        'rmse': lambda x, y: torch.sqrt(torch.mean((x - y)**2, dim=(-2, -1))) 
     }
+        
+    # compute and save metrics
+    diff_eval.compute_metrics(
+        ground = ground,
+        det_predictions = predictions,
+        diff_predictions = diff_predictions,
+        feature_dict = feature_dict,
+        save_dir = save_path,
+        prob_metrics = probalistic_metrics,
+        det_metrics = deterministic_metrics,
+        cfg = cfg
+    )
+    print('Plots generated!')
     
-    return ground, predictions, sampler_params, sampler, probalistic_metrics, deterministic_metrics, valid_dataset, cfg
+    # save the full history
+    diff_eval.save_history(
+        ground, predictions, diff_predictions, save_path
+    )
+    print('History saved!')
     
-    # compute metrics
-    # deterministic_scores, probabilistic_scores = compute_metrics()
-    
-    # plot metrics
-    # <todo>
-    
-    # get graphical 
-    # <todo>
-    
-    
-    # compute graphical 
-    # <todo>
-    
-    
-    # save_history
-    # <todo>
-
 
 if __name__ == "__main__":
     main()

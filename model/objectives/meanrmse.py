@@ -8,30 +8,29 @@ class EnsembleMeanRMSE:
     Computes mean square error between ensemble mean and ground truth.
     Note that this has a bias of σ²/n where σ² is the ensemble variance
     and n is the ensemble size.
-    
-    Parameters:
-        ensemble_dim (str): Dimension name for ensemble members, defaults to 'realization'
     """
     
-    def __init__(self, ensemble_dim: str = 'realization'):
-        self.ensemble_dim = ensemble_dim
+    def __init__(self):
+        """Initialize RMSE calculator. Assumes ensemble members in dimension 1."""
+        pass
         
     def _compute_mse(self, forecast_mean: torch.Tensor, truth: torch.Tensor, 
                     region: Optional[torch.Tensor] = None) -> torch.Tensor:
         """Compute area-averaged MSE between ensemble mean and truth."""
         # Compute squared differences
-        diff = (forecast_mean - truth) ** 2
+        diff = (forecast_mean - truth) ** 2  # (time, n_vars, lat, lon)
+        
+        # Always use fixed spatial dimensions (-2, -1) for lat, lon
+        spatial_dims = (-2, -1)
         
         if region is not None:
             # Apply regional weighting
             diff = diff * region
-            # Average over spatial dimensions (assuming last dimensions are spatial)
-            spatial_dims = tuple(range(diff.ndim - 2, diff.ndim))
+            # Average over spatial dimensions
             mse = torch.sum(diff, dim=spatial_dims) / torch.sum(region, dim=spatial_dims)
         else:
-            # Simple mean over spatial dimensions if no region weights provided
-            spatial_dims = tuple(range(diff.ndim - 2, diff.ndim))
-            mse = torch.mean(diff, dim=spatial_dims)
+            # Simple mean over spatial dimensions
+            mse = torch.mean(diff, dim=spatial_dims)  # (time, n_vars)
             
         return mse
     
@@ -43,33 +42,32 @@ class EnsembleMeanRMSE:
         
         Parameters:
             forecast (torch.Tensor): Ensemble forecast data with shape (time, n_members, n_vars, lat, lon)
-                where:
-                - time: number of forecast start times
-                - n_members: number of ensemble members (realization dimension)
-                - n_vars: number of variables/tendencies being forecast
-                - lat, lon: spatial dimensions for the grid
             truth (torch.Tensor): Ground truth data with shape (time, n_vars, lat, lon)
-                Same as forecast but without the ensemble dimension
             region (torch.Tensor, optional): Regional weights with shape (lat, lon)
             skipna (bool): Whether to skip NaN values
             
         Returns:
-            torch.Tensor: MSE values
+            torch.Tensor: MSE values with shape (time, n_vars)
         """
-        # Get ensemble dimension index
-        ens_dim = forecast.names.index(self.ensemble_dim) if forecast.names else 0
-        
+        # Check minimum ensemble size
+        n_members = forecast.shape[1]  # ensemble dimension is always 1
+        if n_members < 2:
+            raise ValueError("Need at least 2 ensemble members for Ensemble-Mean Score calculation")
+            
         # Calculate ensemble mean
-        forecast_mean = forecast.mean(dim=ens_dim)
+        forecast_mean = forecast.mean(dim=1)  # (time, n_vars, lat, lon)
         
         # Calculate MSE
-        mse = self._compute_mse(forecast_mean, truth, region)
+        mse = self._compute_mse(forecast_mean, truth, region)  # (time, n_vars)
+        
+        # Convert MSE to RMSE by taking square root
+        rmse = torch.sqrt(mse)
         
         if skipna:
             # Replace infinities with NaN
-            mse = torch.where(torch.isinf(mse), torch.nan, mse)
+            rmse = torch.where(torch.isinf(rmse), torch.nan, rmse)
             
-        return mse
+        return rmse
     
     def compute(self, forecast: torch.Tensor, truth: torch.Tensor,
                 region: Optional[torch.Tensor] = None,
@@ -84,13 +82,9 @@ class EnsembleMeanRMSE:
             skipna (bool): Whether to skip NaN values
             
         Returns:
-            torch.Tensor: Time-averaged MSE values
+            torch.Tensor: MSE values with shape (time, n_vars)
         """
         # Compute metrics for the full dataset
         mse = self.compute_chunk(forecast, truth, region, skipna)
-        
-        # Average over time dimension (assumed to be first dimension after removing ensemble)
-        time_dim = 0
-        mse = torch.mean(mse, dim=time_dim)
         
         return mse
