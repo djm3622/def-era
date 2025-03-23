@@ -1,4 +1,4 @@
-# Diffusion-based Condition Perturbations
+# Diffusion-augmented Ensemble Forecasting
 
 Reposity for my capstone project. Much of the code is adapted from ECCC's repository for PARADIS (not the model, just the data acquisition and loading). 
 

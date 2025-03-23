@@ -10,18 +10,18 @@ WALKS=(1 4 8)
 GUIDANCE_SCALES=(0.3 0.5 0.7 1.0)
 ETAS=(0.01 0.1)
 SOLVER_ORDERS=(1 2 3)
-ALGORITHM_TYPES=("dpmsolver++" "dpmsolver")
+ALGORITHM_TYPES=("dpmsolver++")
 NUM_STEPS=(10 25 50 100)
 
 # Root directory for outputs
-ROOT_DIR="/data/users/jupyter-dam724/def-era/outputs/run01/"
+ROOT_DIR="/data/users/jupyter-dam724/def-era/outputs/run02/"
 
 # Function to update yaml value - always with evaluation indentation
 update_yaml() {
     local key=$1
     local value=$2
     local file=$3
-    sed -i "/^evaluation:/,/^[^[:space:]]/s/^[[:space:]]*$key:.*$/  $key: $value/" "$file"
+    perl -i -pe "s|^([[:space:]]*)$key:.*|  $key: $value|g if /^evaluation:/../^[^\s]/" "$file"
 }
 
 # Make a copy of the original config
@@ -35,7 +35,8 @@ for sampler in "${SAMPLERS[@]}"; do
                 case "$sampler" in
                     "DDIM")
                         for eta in "${ETAS[@]}"; do
-                            OUTPUT_DIR="${ROOT_DIR}/${sampler}/${guidance}/${eta}/${num_step}"
+                            # Updated OUTPUT_DIR to include walks
+                            OUTPUT_DIR="${ROOT_DIR}/${sampler}/walks_${walk}/guidance_${guidance}/eta_${eta}/steps_${num_step}"
                             mkdir -p "$OUTPUT_DIR"
                             
                             # Update config file
@@ -76,7 +77,8 @@ for sampler in "${SAMPLERS[@]}"; do
                     "DPM++")
                         for solver_order in "${SOLVER_ORDERS[@]}"; do
                             for algorithm_type in "${ALGORITHM_TYPES[@]}"; do
-                                OUTPUT_DIR="${ROOT_DIR}/${sampler}/${guidance}/${solver_order}/${algorithm_type}/${num_step}"
+                                # Updated OUTPUT_DIR to include walks
+                                OUTPUT_DIR="${ROOT_DIR}/${sampler}/walks_${walk}/guidance_${guidance}/solver_${solver_order}/algo_${algorithm_type}/steps_${num_step}"
                                 mkdir -p "$OUTPUT_DIR"
                                 
                                 # Update config file

@@ -157,6 +157,51 @@ def main(cfg: DictConfig) -> None:
         det_metrics = deterministic_metrics,
         cfg = cfg
     )
+    
+    # plot actual predictionss
+    diff_eval.plot_ensemble_predictions(
+        diff_predictions, 
+        ground,
+        feature_dict, 
+        feature_switch, 
+        save_dir = save_path, 
+        forecast_hours = 6
+    )
+
+    # create animations
+    diff_eval.create_ensemble_animation(
+        diff_predictions, 
+        feature_dict, 
+        feature_switch, 
+        save_dir = save_path
+    )
+    
+    diff_eval.plot_ensemble_snapshots(
+        diff_predictions,
+        feature_dict,
+        feature_switch,
+        save_dir = save_path,
+        lead_times=[6, 40, 80, 120, 160, 200]
+    )
+
+    # Plot all ensemble members at specific lead times
+    diff_eval.plot_all_ensemble_members(
+        diff_predictions,
+        feature_dict,
+        feature_switch,
+        save_dir = save_path,
+        lead_times = [0, 40, 80, 120, 160, 200]
+        
+    )
+
+    # Create spaghetti plots showing uncertainty in contour lines
+    diff_eval.create_spaghetti_plot(
+        diff_predictions,
+        ground,
+        feature_dict,
+        feature_switch,
+        save_dir = save_path
+    )
     print('Plots generated!')
     
     # save the full history
