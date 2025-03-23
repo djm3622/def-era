@@ -1,6 +1,6 @@
 device:
   preference: 'cuda'
-  index: 1
+  index: 2
   
 deterministic:
   from_state: "checkpoint/operator/op-forecast-08/checkpoint_epoch_37.pt"
@@ -11,11 +11,11 @@ diffusion:
 evaluation:
   start_time: 50
   iterations: 40
-  save_path: 'outputs/neweval-diffusion/'
+  save_path: 'outputs/10steps-7walks-0.5guidance/'
   
   samples: 32
   sampler: "DPM++"
-  walks: 1
+  walks: 7
   
   # general
   guidance_scale: 0.5

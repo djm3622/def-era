@@ -6,7 +6,7 @@ from omegaconf import DictConfig, OmegaConf
 
 
 def load_model_weights(model, state_dict_path):
-    pt_load = torch.load(state_dict_path, weights_only=False)
+    pt_load = torch.load(state_dict_path, weights_only=False, map_location=model.device)
     state_dict = pt_load['model_state_dict']
     
     model_state = model.state_dict()

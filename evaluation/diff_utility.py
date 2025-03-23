@@ -365,7 +365,7 @@ def plot_all_ensemble_members(
     save_dir: str,
     lead_times: list = None,
     forecast_hours: int = 6,
-    max_members: int = 9  # Limit the number of members to display
+    max_members: int = 16  # Limit the number of members to display
 ) -> None:
     # Ensure the save directories exist
     save_dir = os.path.join(save_dir, 'members')
@@ -493,8 +493,10 @@ def create_spaghetti_plot(
         'figure.titlesize': 16
     })
     
-    # Create array of lead times
-    lead_times = list(range(6, iterations * forecast_hours, forecast_hours))
+    # Create array of all lead times
+    all_lead_times = np.arange(iterations) * forecast_hours
+    
+    # Select time steps for plotting
     selected_steps = [6, min(int(iterations/3), iterations-1), min(int(iterations*2/3), iterations-1), iterations-1]
     
     # For each enabled feature
@@ -522,6 +524,11 @@ def create_spaghetti_plot(
         
         # Plot for selected time steps
         for i, step in enumerate(selected_steps):
+            if step >= iterations:
+                # Skip if the step is beyond available data
+                axes[i].set_visible(False)
+                continue
+                
             # Plot ensemble members as thin contour lines
             for member in range(samples):
                 axes[i].contour(
@@ -540,8 +547,9 @@ def create_spaghetti_plot(
                 linewidths=2
             )
             
-            # Add title for this subplot
-            axes[i].set_title(f'Lead Time: {lead_times[step]}h')
+            # Add title for this subplot - use the calculated lead time
+            lead_time = all_lead_times[step]
+            axes[i].set_title(f'Lead Time: {lead_time}h')
             axes[i].set_xticks([])
             axes[i].set_yticks([])
         
@@ -700,7 +708,7 @@ def plot_metric(
         
         for var_name, metric in zip(var_names, metrics):
             y_vals = metric[1:, feature_idx]
-            x_vals = np.arange(1, y_vals.shape[0]) * 6
+            x_vals = np.arange(1, y_vals.shape[0]+1) * 6
             plt.plot(x_vals, y_vals, 'o-', label=var_name)
             
         # Add title and axis labels
