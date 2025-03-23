@@ -417,7 +417,7 @@ def plot_all_ensemble_members(
             grid_size = int(np.ceil(np.sqrt(num_members)))
             
             # Create figure
-            fig, axes = plt.subplots(grid_size, grid_size, figsize=(3*grid_size, 3*grid_size))
+            fig, axes = plt.subplots(grid_size, grid_size, figsize=(2*grid_size, 2*grid_size))
             
             # Make axes a 2D array if it's not already (happens when grid_size=1)
             if grid_size == 1:

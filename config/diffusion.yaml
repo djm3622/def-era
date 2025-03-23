@@ -11,14 +11,14 @@ diffusion:
 evaluation:
   start_time: 50
   iterations: 40
-  save_path: 'outputs/10steps-7walks-0.5guidance/'
+  save_path: 'outputs/10steps-1walks-0.3guidance/'
   
   samples: 32
   sampler: "DPM++"
-  walks: 7
+  walks: 1
   
   # general
-  guidance_scale: 0.5
+  guidance_scale: 0.3
   corrector: True
   num_steps: 10
   

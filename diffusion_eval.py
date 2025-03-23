@@ -193,15 +193,6 @@ def main(cfg: DictConfig) -> None:
         lead_times = [0, 40, 80, 120, 160, 200]
         
     )
-
-    # Create spaghetti plots showing uncertainty in contour lines
-    diff_eval.create_spaghetti_plot(
-        diff_predictions,
-        ground,
-        feature_dict,
-        feature_switch,
-        save_dir = save_path
-    )
     print('Plots generated!')
     
     # save the full history
