@@ -169,19 +169,53 @@ def main(cfg: DictConfig) -> None:
     )
 
     # create animations
-    diff_eval.create_ensemble_animation(
-        diff_predictions, 
-        feature_dict, 
-        feature_switch, 
-        save_dir = save_path
+    diff_eval.create_ensemble_animation_pub(
+        diff_predictions,
+        feature_dict,
+        feature_switch,
+        save_dir=save_path,
+        forecast_hours=6
     )
     
+    # comparison animations
+    diff_eval.create_comparison_animation(
+        diff_predictions,
+        ground,
+        feature_dict,
+        feature_switch,
+        save_dir=save_path,
+        forecast_hours=6
+    )
+    
+    # member distances
+    diff_eval.plot_ensemble_rmse(
+        diff_predictions, 
+        ground,
+        predictions,
+        feature_dict,
+        feature_switch,
+        save_dir=save_path,
+        forecast_hours=6,
+        plot_mean_rmse=True
+    )
+    
+    # anaimation static
     diff_eval.plot_ensemble_snapshots(
         diff_predictions,
         feature_dict,
         feature_switch,
         save_dir = save_path,
         lead_times=[6, 40, 80, 120, 160, 200]
+    )
+    
+    # comparision animation static
+    diff_eval.plot_ensemble_comparison_snapshots(
+        diff_predictions,
+        ground,
+        feature_dict,
+        feature_switch,
+        save_dir=save_path,
+        forecast_hours=6
     )
 
     # Plot all ensemble members at specific lead times

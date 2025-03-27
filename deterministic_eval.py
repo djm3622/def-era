@@ -79,29 +79,30 @@ def main(cfg: DictConfig) -> None:
         cfg
     )
     
-    # Ensure the save directories exist
-    trajectory_dir = os.path.join(cfg['evaluation']['save_path'], 'trajectories')
-    rmse_dir = os.path.join(cfg['evaluation']['save_path'], 'rmse')
-
-    os.makedirs(trajectory_dir, exist_ok=True)
-    os.makedirs(rmse_dir, exist_ok=True)
-    
-    # save trajectory gifs
-    evaluation.save_trajectory_gifs(
-        ground,
-        predictions,
-        feature_dict,
-        save_dir = trajectory_dir,
-        cfg = cfg
+    # generate animations
+    evaluation.save_trajectory_gifs_pub(
+        ground, 
+        predictions, 
+        feature_dict, 
+        save_path
     )
-        
-    # save rmse plots
-    evaluation.save_rmse_plots(
-        ground,
-        predictions,
-        feature_dict,
-        save_dir = rmse_dir,
-        cfg = cfg
+
+    # create RMSE plots
+    evaluation.save_rmse_plots_pub(
+        ground, 
+        predictions, 
+        feature_dict, 
+        save_path, 
+        forecast_hours=6
+    )
+
+    # generate snapshot panels showing truth, prediction, and error
+    evaluation.plot_error_snapshots(
+        ground, 
+        predictions, 
+        feature_dict, 
+        save_path, 
+        num_panels=4
     )
 
 

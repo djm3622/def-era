@@ -1,0 +1,155 @@
+device:
+  preference: 'cuda'
+  index: 2
+  
+deterministic:
+  from_state: "checkpoint/operator/op-forecast-08/checkpoint_epoch_37.pt"
+  
+diffusion:
+  from_state: "checkpoint/diffusion/diffusion-larger/states/checkpoint_epoch_299.pt"
+  
+evaluation:
+  start_time: 50
+  iterations: 40
+  save_path: 'outputs/10steps-1walks-0.5guidance-diffnewvis/'
+  
+  samples: 32
+  sampler: "DPM++"
+  walks: 1
+  
+  # general
+  guidance_scale: 0.5
+  corrector: True
+  num_steps: 10
+  
+  # ddim specific
+  eta: 0.01
+  
+  # dpm++ specific
+  solver_order: 2
+  prediction_type: "epsilon"
+  algorithm_type: "dpmsolver++"
+  
+  pressure_levels:
+    50: True
+    100: True
+    150: True
+    200: True
+    250: True
+    300: True
+    400: True
+    500: True
+    600: True
+    700: True
+    850: True
+    925: True
+    1000: True
+
+  base:
+    atmospheric:
+      geopotential: True
+      wind_x: True
+      wind_y: True
+      wind_z: True
+      specific_humidity: True
+      temperature: True
+    surface:
+      wind_x_10m: True
+      wind_y_10m: True
+      2m_temperature: True
+      mean_sea_level_pressure: True
+      surface_pressure: True
+      total_column_water: True
+      total_precipitation_6hr: True
+  
+# Input dataset
+dataset:
+  root_dir: ERA5/5.65deg
+  time_resolution: 6h              # Time between two consecutive samples
+  forecast_steps: 1                # Number of autoregressive steps for forecasting
+  timestep: 1000
+  
+  beta_start: 1e-4
+  beta_end: 0.02
+
+# Training parameters
+training:
+  dataset:
+    start_date: 2000-01-01         # Start date for the training dataset (YYYY-MM-DD)
+    end_date: 2019-12-31           # End date for the training dataset (YYYY-MM-DD)
+
+  validation_dataset:
+    start_date: 2020-01-01         # Start date for the validation dataset (YYYY-MM-DD)
+    end_date: 2020-12-31           # End date for the validation dataset (YYYY-MM-DD)
+
+  variable_loss_weights:
+    atmospheric:
+      wind_x: 1.0
+      wind_y: 1.0
+      wind_z: 1.0
+      geopotential: 1.0
+      specific_humidity: 1.0
+      temperature: 1.0
+    surface:
+      wind_x_10m: 0.1
+      wind_y_10m: 0.1
+      2m_temperature: 0.1
+      mean_sea_level_pressure: 0.1
+      surface_pressure: 0.1
+      total_column_water: 0.1
+      total_precipitation_6hr: 0.1
+
+features:
+  pressure_levels:
+    - 50
+    - 100
+    - 150
+    - 200
+    - 250
+    - 300
+    - 400
+    - 500
+    - 600
+    - 700
+    - 850
+    - 925
+    - 1000
+
+  base:
+    atmospheric:
+      - geopotential
+      - wind_x
+      - wind_y
+      - wind_z
+      - specific_humidity
+      - temperature
+    surface:
+      - wind_x_10m
+      - wind_y_10m
+      - 2m_temperature
+      - mean_sea_level_pressure
+      - surface_pressure
+      - total_column_water
+      - total_precipitation_6hr
+
+  input:
+    atmospheric: ${features.base.atmospheric}
+    surface: ${features.base.surface}
+    forcings:
+      - toa_incident_solar_radiation
+      - sin_time_of_day
+      - cos_time_of_day
+      - sin_year_progress
+      - cos_year_progress
+    constants:
+      - geopotential_at_surface
+      - land_sea_mask
+      - slope_of_sub_gridscale_orography
+      - standard_deviation_of_orography
+      - latitude
+      - longitude
+
+  output:
+    atmospheric: ${features.base.atmospheric}
+    surface: ${features.base.surface}
+

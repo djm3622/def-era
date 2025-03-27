@@ -1,11 +1,11 @@
 device:
   preference: 'cuda'
-  index: 0
+  index: 3
   
 evaluation:
-  start_time: 10
-  iterations: 30
-  save_path: 'outputs/temp_full_auto/evaluation_data/'
+  start_time: 50
+  iterations: 40
+  save_path: 'outputs/det-truth/'
   
   pressure_levels:
     50: True
@@ -41,7 +41,7 @@ evaluation:
 
 
 distributed_training:
-  num_processes: 2
+  num_processes: 1
   per_gpu_batch_size: 32
   total_batch_size: 64  # per_gpu_batch_size * num_processes
   workers_per_gpu: 6
@@ -52,7 +52,7 @@ distributed_training:
 experiment:
   project_name: "DEF"
   experiment_name: "init-op"
-  save_path: "outputs/"
+  save_path: "outputs/det-truth/"
   from_checkpoint: "checkpoint/operator/op-forecast-08/checkpoint_epoch_37.pt"
   
 # Input dataset

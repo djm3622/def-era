@@ -4,6 +4,7 @@ outputs/
 wandb/
 testing.ipynb
 config_temp.yaml
+_output/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

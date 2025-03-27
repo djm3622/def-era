@@ -1,65 +1,52 @@
-device:
-  preference: 'cuda'
-  index: 2
-  
-deterministic:
-  from_state: "checkpoint/operator/op-forecast-08/checkpoint_epoch_37.pt"
-  
-diffusion:
-  from_state: "checkpoint/diffusion/diffusion-larger/states/checkpoint_epoch_299.pt"
+# the number of names must be equal to the number of checkpoints
+runs:
+  names:
+    - "Diffusion[0.5, 1]"
+    - "Diffusion[0.5, 3]"
+    - "Diffusion[0.5, 7]"
+     
+  # checkpoints must be absolute, each dir has (deterministic.pth, diffusion.pth, truth.pth)
+  ckpts:
+    - "/data/users/jupyter-dam724/def-era/outputs/10steps-1walks-0.5guidance-newvis/history"
+    - "/data/users/jupyter-dam724/def-era/outputs/10steps-3walks-0.5guidance-newvis/history"
+    - "/data/users/jupyter-dam724/def-era/outputs/10steps-7walks-0.5guidance-newvis/history"
   
 evaluation:
+  save_path: "outputs/comparison_walks"
+
   start_time: 50
   iterations: 40
-  save_path: 'outputs/10steps-1walks-0.3guidance/'
-  
-  samples: 32
-  sampler: "DPM++"
-  walks: 1
-  
-  # general
-  guidance_scale: 0.3
-  corrector: True
-  num_steps: 10
-  
-  # ddim specific
-  eta: 0.01
-  
-  # dpm++ specific
-  solver_order: 2
-  prediction_type: "epsilon"
-  algorithm_type: "dpmsolver++"
   
   pressure_levels:
-    50: True
-    100: True
-    150: True
-    200: True
-    250: True
-    300: True
-    400: True
-    500: True
-    600: True
-    700: True
+    50: False
+    100: False
+    150: False
+    200: False
+    250: False
+    300: False
+    400: False
+    500: False
+    600: False
+    700: False
     850: True
-    925: True
-    1000: True
+    925: False
+    1000: False
 
   base:
     atmospheric:
       geopotential: True
-      wind_x: True
-      wind_y: True
-      wind_z: True
+      wind_x: False
+      wind_y: False
+      wind_z: False
       specific_humidity: True
-      temperature: True
+      temperature: False
     surface:
       wind_x_10m: True
       wind_y_10m: True
       2m_temperature: True
-      mean_sea_level_pressure: True
-      surface_pressure: True
-      total_column_water: True
+      mean_sea_level_pressure: False
+      surface_pressure: False
+      total_column_water: False
       total_precipitation_6hr: True
   
 # Input dataset
