@@ -2,7 +2,6 @@ checkpoint/
 ERA5/
 outputs/
 wandb/
-testing.ipynb
 config_temp.yaml
 _output/
 
