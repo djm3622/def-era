@@ -61,12 +61,11 @@ def main(cfg: DictConfig) -> None:
         cfg=cfg,
     )
 
-    sample_state, sample_forcings, sample_constants, _, _ = train_dataset[0]
+    sample_state, sample_constants, _, _ = train_dataset[0]
     channels, _, _ = sample_state.shape
 
     diffusion_model = paradis_model.get_paradis_diffusion_model(
         state_channels=channels,
-        forcing_channels=sample_forcings.shape[0],
         static_channels=sample_constants.shape[0],
         lat=train_dataset.lat,
         lon=train_dataset.lon,

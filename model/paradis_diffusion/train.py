@@ -22,7 +22,7 @@ def _diffusion_step(
     alpha_bar: torch.Tensor,
     condition_dropout: float,
 ) -> torch.Tensor:
-    clean_states, forcings, constants, noise, timesteps = batch
+    clean_states, constants, noise, timesteps = batch
     timesteps = timesteps.squeeze(-1).long()
     alpha_bar_t = alpha_bar[timesteps].view(-1, 1, 1, 1)
 
@@ -43,7 +43,6 @@ def _diffusion_step(
         condition=condition,
         noisy_state=noisy_state,
         timesteps=timesteps,
-        forcings=forcings,
         constants=constants,
         return_dict=False,
     )[0]
@@ -69,7 +68,7 @@ def _validation_loss(
     for batch_idx, batch in enumerate(valid):
         if max_batches is not None and batch_idx >= max_batches:
             break
-        loss = _diffusion_step(batch, model, criterion, alpha_bar, condition_dropout)
+        loss = _diffusion_step(batch, model, criterion, alpha_bar, 0.0)
         gathered = accelerator.gather(loss.detach().view(1)).mean()
         losses.append(gathered)
 
@@ -140,7 +139,7 @@ def training_loop(
                 optimizer.step()
                 if scheduler is not None:
                     scheduler.step()
-                optimizer.zero_grad()
+                optimizer.zero_grad(set_to_none=True)
                 train_loss += loss.item()
 
             if loading_bar:

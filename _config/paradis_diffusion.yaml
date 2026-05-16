@@ -59,14 +59,15 @@ training:
       geopotential: 1.0
       specific_humidity: 1.0
       temperature: 1.0
+      vertical_velocity: 1.0
     surface:
-      wind_x_10m: 0.1
-      wind_y_10m: 0.1
-      2m_temperature: 0.1
-      mean_sea_level_pressure: 0.1
-      surface_pressure: 0.1
-      total_column_water: 0.1
-      total_precipitation_6hr: 0.1
+      wind_x_10m: 1.0
+      wind_y_10m: 1.0
+      wind_z_10m: 1.0
+      2m_temperature: 1.0
+      mean_sea_level_pressure: 1.0
+      surface_pressure: 1.0
+      total_column_water: 1.0
 
 paradis:
   compute:
@@ -142,29 +143,29 @@ features:
       - wind_z
       - specific_humidity
       - temperature
+      - vertical_velocity
     surface:
       - wind_x_10m
       - wind_y_10m
+      - wind_z_10m
       - 2m_temperature
       - mean_sea_level_pressure
       - surface_pressure
       - total_column_water
-      - total_precipitation_6hr
 
   input:
     atmospheric: ${features.base.atmospheric}
     surface: ${features.base.surface}
-    forcings:
-      - toa_incident_solar_radiation
-      - sin_time_of_day
-      - cos_time_of_day
-      - sin_year_progress
-      - cos_year_progress
+    forcings: []
     constants:
       - geopotential_at_surface
       - land_sea_mask
       - slope_of_sub_gridscale_orography
       - standard_deviation_of_orography
+      - lon_spacing
+      - cos_latitude
+      - cos_longitude
+      - sin_longitude
       - latitude
       - longitude
 

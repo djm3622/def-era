@@ -42,7 +42,6 @@ class ParadisDiffusionDenoiser(nn.Module):
     def __init__(
         self,
         state_channels: int,
-        forcing_channels: int,
         static_channels: int,
         lat: np.ndarray,
         lon: np.ndarray,
@@ -51,7 +50,6 @@ class ParadisDiffusionDenoiser(nn.Module):
     ) -> None:
         super().__init__()
         self.state_channels = state_channels
-        self.forcing_channels = forcing_channels
         self.static_channels = static_channels
         self.timesteps = int(cfg.dataset.timestep)
 
@@ -59,7 +57,7 @@ class ParadisDiffusionDenoiser(nn.Module):
         paradis_cfg = _build_paradis_cfg(cfg)
         Paradis = load_paradis_class(paradis_root)
 
-        dyn_channels = state_channels * 3 + forcing_channels + 1
+        dyn_channels = state_channels * 3 + 1
         dataset_spec = SimpleNamespace(
             num_in_dyn_features=dyn_channels,
             num_in_static_features=static_channels,
@@ -72,6 +70,10 @@ class ParadisDiffusionDenoiser(nn.Module):
         )
 
         self.paradis = Paradis(datamodule_spec, paradis_cfg, lat_grid, lon_grid)
+
+    @property
+    def device(self) -> torch.device:
+        return next(self.parameters()).device
 
     def _time_channel(
         self, timesteps: torch.Tensor, shape: Tuple[int, int, int, int]
@@ -86,14 +88,9 @@ class ParadisDiffusionDenoiser(nn.Module):
         condition: torch.Tensor,
         noisy_state: torch.Tensor,
         timesteps: torch.Tensor,
-        forcings: Optional[torch.Tensor] = None,
         constants: Optional[torch.Tensor] = None,
         return_dict: bool = False,
     ):
-        if forcings is None:
-            forcings = condition.new_empty(
-                condition.shape[0], 0, condition.shape[-2], condition.shape[-1]
-            )
         if constants is None:
             constants = condition.new_empty(
                 condition.shape[0], 0, condition.shape[-2], condition.shape[-1]
@@ -107,7 +104,6 @@ class ParadisDiffusionDenoiser(nn.Module):
                 condition,
                 noisy_state,
                 timestep_channel,
-                forcings,
                 constants,
             ],
             dim=1,
@@ -121,7 +117,6 @@ class ParadisDiffusionDenoiser(nn.Module):
 
 def get_paradis_diffusion_model(
     state_channels: int,
-    forcing_channels: int,
     static_channels: int,
     lat: np.ndarray,
     lon: np.ndarray,
@@ -129,7 +124,6 @@ def get_paradis_diffusion_model(
 ) -> ParadisDiffusionDenoiser:
     return ParadisDiffusionDenoiser(
         state_channels=state_channels,
-        forcing_channels=forcing_channels,
         static_channels=static_channels,
         lat=lat,
         lon=lon,
