@@ -1,3 +1,7 @@
 [submodule "graphcast"]
 	path = graphcast
 	url = https://github.com/csubich/graphcast.git
+[submodule "paradis"]
+	path = paradis
+	url = https://github.com/Wx-Alliance-Alliance-Meteo/paradis_model.git
+	branch = main

@@ -1,0 +1,173 @@
+device:
+  preference: "cuda"
+  index: null
+
+paradis_diffusion:
+  condition_dropout: 0.1
+
+distributed_training:
+  num_processes: 1
+  total_batch_size: 2
+  workers_per_gpu: 2
+  workers: 2
+  grad_accumulate: 1
+  mixed_precision: "fp16"
+
+optimization:
+  base_lr: 1.0e-5
+  max_lr: 1.0e-4
+  lr: 1.0e-5
+
+training_info:
+  epochs: 5
+  validation_delay: 1
+  validation_batches: 2
+  patience: 10
+
+experiment:
+  project_name: "DEF"
+  experiment_name: "paradis-diffusion-5deg-smoke"
+  save_path: "outputs/paradis-diffusion-5deg-smoke/"
+  from_checkpoint: null
+  from_state: null
+
+dataset:
+  root_dir: "ERA5/5.65deg"
+  time_resolution: 6h
+  forecast_steps: 1
+  timestep: 1000
+  beta_start: 1.0e-4
+  beta_end: 0.02
+
+training:
+  seed: 100
+  gamma: 0.99
+
+  dataset:
+    start_date: 2010-01-01
+    end_date: 2010-01-31
+
+  validation_dataset:
+    start_date: 2011-01-01
+    end_date: 2011-01-07
+
+  variable_loss_weights:
+    atmospheric:
+      wind_x: 1.0
+      wind_y: 1.0
+      wind_z: 1.0
+      geopotential: 1.0
+      specific_humidity: 1.0
+      temperature: 1.0
+    surface:
+      wind_x_10m: 0.1
+      wind_y_10m: 0.1
+      2m_temperature: 0.1
+      mean_sea_level_pressure: 0.1
+      surface_pressure: 0.1
+      total_column_water: 0.1
+      total_precipitation_6hr: 0.1
+
+paradis:
+  compute:
+    compile: false
+    gradient_checkpointing: false
+
+  model:
+    latent_size: 128
+    forecast_steps: 1
+    base_dt: 21600
+    num_layers: 2
+    bias_channels: 10
+    velocity_vectors: 8
+    adv_interpolation: bilinear
+    downsample_diffusion: false
+    latent_size_static: 32
+    activation: SiLU
+
+    physblock:
+      input_proj:
+        layers:
+          - CLinear
+        hidden_dim: ${paradis.model.latent_size}
+      velocity_net:
+        layers:
+          - CLinear
+        hidden_dim: ${paradis.model.latent_size}
+      diffusion:
+        layers:
+          - SepConv
+        hidden_dim: ${paradis.model.latent_size}
+      reaction:
+        layers:
+          - CLinear
+          - CLinear
+        hidden_dim: ${paradis.model.latent_size}
+      output_proj:
+        layers:
+          - SepConv
+          - SepConv
+        hidden_dim: ${paradis.model.latent_size}
+      advection:
+        down_projection:
+          layers:
+            - SepConv
+          hidden_dim: ${paradis.model.latent_size}
+        up_projection:
+          layers:
+            - SepConv
+          hidden_dim: ${paradis.model.latent_size}
+
+features:
+  pressure_levels:
+    - 50
+    - 100
+    - 150
+    - 200
+    - 250
+    - 300
+    - 400
+    - 500
+    - 600
+    - 700
+    - 850
+    - 925
+    - 1000
+
+  base:
+    atmospheric:
+      - geopotential
+      - wind_x
+      - wind_y
+      - wind_z
+      - specific_humidity
+      - temperature
+    surface:
+      - wind_x_10m
+      - wind_y_10m
+      - 2m_temperature
+      - mean_sea_level_pressure
+      - surface_pressure
+      - total_column_water
+      - total_precipitation_6hr
+
+  input:
+    atmospheric: ${features.base.atmospheric}
+    surface: ${features.base.surface}
+    forcings:
+      - toa_incident_solar_radiation
+      - sin_time_of_day
+      - cos_time_of_day
+      - sin_year_progress
+      - cos_year_progress
+    constants:
+      - geopotential_at_surface
+      - land_sea_mask
+      - slope_of_sub_gridscale_orography
+      - standard_deviation_of_orography
+      - latitude
+      - longitude
+
+  output:
+    atmospheric: ${features.base.atmospheric}
+    surface: ${features.base.surface}
