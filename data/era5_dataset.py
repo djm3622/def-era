@@ -34,7 +34,7 @@ class ERA5Dataset(torch.utils.data.Dataset):
 
         # Lazy open this dataset
         ds = xarray.open_mfdataset(
-            os.path.join(root_dir, "*"),
+            os.path.join(root_dir, "*[0-9]"),
             chunks={"time": self.forecast_steps + 1},
             engine="zarr",
         )
@@ -197,9 +197,15 @@ class ERA5Dataset(torch.utils.data.Dataset):
         ds_input = ds.sel(features=self.dyn_input_features)
         ds_output = ds.sel(features=self.dyn_output_features)
 
-        # Fetch data 
-        self.ds_input = ds_input["data"]
-        self.ds_output = ds_output["data"]
+        # Fetch data in the tensor layout expected by __getitem__:
+        # [time, latitude, longitude, features]. PARADIS preprocessing writes
+        # zarr data as [time, features, latitude, longitude].
+        self.ds_input = ds_input["data"].transpose(
+            "time", "latitude", "longitude", "features"
+        )
+        self.ds_output = ds_output["data"].transpose(
+            "time", "latitude", "longitude", "features"
+        )
 
         # Get the indices to apply custom normalizations
         self._prepare_normalization(ds_input, ds_output)

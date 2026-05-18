@@ -13,6 +13,7 @@ import model.schedulers as schedulers
 import model.utility as model_utility
 import model.objectives.diffusion_loss as loss
 import utils.utility as utility
+import utils.wandb_helper as wbhelp
 
 
 def _loader_kwargs(cfg: DictConfig, shuffle: bool) -> dict:
@@ -45,6 +46,12 @@ def main(cfg: DictConfig) -> None:
             cfg.experiment.save_path,
             cfg.experiment.experiment_name,
         )
+        wbhelp.init_wandb(
+            project_name=cfg.experiment.project_name,
+            run_name=cfg.experiment.experiment_name,
+            config_class=cfg,
+            save_path=save_path,
+        )
 
     train_dataset = data.ERA5ParadisDiffusionDataset(
         root_dir=cfg.dataset.root_dir,
@@ -71,6 +78,8 @@ def main(cfg: DictConfig) -> None:
         lon=train_dataset.lon,
         cfg=cfg,
     )
+    if accelerator.is_main_process:
+        wbhelp.save_model_architecture(diffusion_model, cfg.experiment.save_path)
 
     if cfg.experiment.from_checkpoint is not None:
         model_utility.load_model_weights(diffusion_model, cfg.experiment.from_checkpoint)
@@ -125,6 +134,9 @@ def main(cfg: DictConfig) -> None:
         epoch_start=0 if epoch_start is None else epoch_start,
         config=cfg,
     )
+
+    if accelerator.is_main_process:
+        wbhelp.finish_run()
 
 
 if __name__ == "__main__":

@@ -7,7 +7,7 @@ loss:
   mae: 0.5
 
 deterministic:
-  from_state: "checkpoint/operator/op-forecast-08/checkpoint_epoch_37.pt"
+  from_state: "${oc.env:SCRATCH,/scratch/dmillard}/def-era/checkpoint/operator/op-forecast-08/checkpoint_epoch_37.pt"
 
 distributed_training:
   num_processes: 1
@@ -29,13 +29,13 @@ training_info:
 experiment:
   project_name: "DEF"
   experiment_name: "diffusion-larger"
-  save_path: "/data/users/jupyter-dam724/def-era/checkpoint/diffusion/diffusion-larger/"
+  save_path: "${oc.env:SCRATCH,/scratch/dmillard}/def-era/checkpoint/diffusion/diffusion-larger/"
   from_checkpoint: null
   from_state: null
 
 # Input dataset
 dataset:
-  root_dir: ERA5/5.65deg
+  root_dir: ${oc.env:SCRATCH,/scratch/dmillard}/def-era/ERA5/5.65deg
   time_resolution: 6h              # Time between two consecutive samples
   forecast_steps: 1                # Number of autoregressive steps for forecasting
   timestep: 1000                   # Number of timesteps for the DIFFUSION model
@@ -124,3 +124,9 @@ features:
     atmospheric: ${features.base.atmospheric}
     surface: ${features.base.surface}
 
+hydra:
+  run:
+    dir: ${oc.env:SCRATCH,/scratch/dmillard}/def-era/hydra/run
+  sweep:
+    dir: ${oc.env:SCRATCH,/scratch/dmillard}/def-era/hydra_sweeps
+    subdir: job

@@ -45,6 +45,17 @@ def init_wandb(
     """
     # Convert config class to dictionary
     config_dict = _convert_config_to_dict(config_class)
+
+    scratch_root = os.environ.get("DEF_ERA_STORAGE_ROOT")
+    if scratch_root is None:
+        scratch_root = os.path.join(
+            os.environ.get("SCRATCH", "/scratch/dmillard"),
+            "def-era",
+        )
+    wandb_dir = os.path.join(scratch_root, "wandb")
+    os.makedirs(wandb_dir, exist_ok=True)
+    os.environ.setdefault("WANDB_DIR", wandb_dir)
+    os.environ.setdefault("WANDB_CACHE_DIR", os.path.join(scratch_root, "wandb_cache"))
     
     wandb.init(
         project=project_name,

@@ -11,7 +11,7 @@ pip install -r requirements.txt --break-system-packages
 
 ## Usage
 ### Configurations
-There are two primary configuration files, the `config.yaml` and `accelerator.yaml`, both located in the `config/` directory.
+There are two primary configuration files, the `config.yaml` and `accelerator.yaml" located in the `config/` directory.
 The `config.yaml` handles the training (both deterministic and diffusion) and dataset parameters while the `accelerator.yaml` handles the parameters for ditributed training.
 
 In the following sections, each command will allow for `[override_args]`, which overrides the inputs in the config file.
@@ -70,7 +70,7 @@ bash download_dataset.sh OUTPUT_DIR
 where OUTPUT_DIR is the destination directory and then preprocess it
 
 ```
-python scripts/preprocess_weatherbench_data.py -i /path/to/ERA5/5.625deg_wb2 -o /path/to/ERA5/5.65deg
+python scripts/preprocess_weatherbench_data.py -i "$SCRATCH/def-era/ERA5/5.625deg_wb2" -o "$SCRATCH/def-era/ERA5/5.65deg"
 ```
 
      

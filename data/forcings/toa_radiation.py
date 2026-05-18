@@ -196,3 +196,37 @@ def toa_radiation(times: numpy.ndarray, lat: numpy.ndarray, lon: numpy.ndarray):
         )
 
     return output_rad
+
+
+def toa_radiation_stats(
+    times: numpy.ndarray,
+    lat: numpy.ndarray,
+    lon: numpy.ndarray,
+    batch_size: int = 128,
+) -> tuple[float, float]:
+    """Compute global mean/std of TOA radiation without materializing all times."""
+
+    time_data = numpy.asarray(times)
+    if time_data.size == 0:
+        raise ValueError("Cannot compute TOA radiation statistics for empty times.")
+
+    count = 0
+    mean = 0.0
+    m2 = 0.0
+
+    for start in range(0, time_data.size, batch_size):
+        values = toa_radiation(time_data[start : start + batch_size], lat, lon).astype(
+            numpy.float64,
+            copy=False,
+        )
+        batch_count = values.size
+        batch_mean = float(values.mean())
+        batch_var = float(values.var())
+
+        total_count = count + batch_count
+        delta = batch_mean - mean
+        mean += delta * batch_count / total_count
+        m2 += batch_var * batch_count + delta**2 * count * batch_count / total_count
+        count = total_count
+
+    return mean, float(numpy.sqrt(m2 / count))

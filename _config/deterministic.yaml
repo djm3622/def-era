@@ -5,7 +5,7 @@ device:
 evaluation:
   start_time: 50
   iterations: 40
-  save_path: 'outputs/det-truth/'
+  save_path: '${oc.env:SCRATCH,/scratch/dmillard}/def-era/outputs/det-truth/'
   
   pressure_levels:
     50: True
@@ -52,12 +52,12 @@ distributed_training:
 experiment:
   project_name: "DEF"
   experiment_name: "init-op"
-  save_path: "outputs/det-truth/"
-  from_checkpoint: "checkpoint/operator/op-forecast-08/checkpoint_epoch_37.pt"
+  save_path: "${oc.env:SCRATCH,/scratch/dmillard}/def-era/outputs/det-truth/"
+  from_checkpoint: "${oc.env:SCRATCH,/scratch/dmillard}/def-era/checkpoint/operator/op-forecast-08/checkpoint_epoch_37.pt"
   
 # Input dataset
 dataset:
-  root_dir: ERA5/5.65deg
+  root_dir: ${oc.env:SCRATCH,/scratch/dmillard}/def-era/ERA5/5.65deg
   time_resolution: 6h              # Time between two consecutive samples
   forecast_steps: 1                # Number of autoregressive steps for forecasting
 
@@ -142,3 +142,9 @@ features:
     atmospheric: ${features.base.atmospheric}
     surface: ${features.base.surface}
 
+hydra:
+  run:
+    dir: ${oc.env:SCRATCH,/scratch/dmillard}/def-era/hydra/run
+  sweep:
+    dir: ${oc.env:SCRATCH,/scratch/dmillard}/def-era/hydra_sweeps
+    subdir: job

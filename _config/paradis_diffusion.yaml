@@ -7,10 +7,10 @@ paradis_diffusion:
 
 distributed_training:
   num_processes: 1
-  total_batch_size: 2
+  total_batch_size: 8
   workers_per_gpu: 2
   workers: 2
-  grad_accumulate: 1
+  grad_accumulate: 4
   mixed_precision: "fp16"
 
 optimization:
@@ -19,7 +19,7 @@ optimization:
   lr: 1.0e-5
 
 training_info:
-  epochs: 5
+  epochs: 20
   validation_delay: 1
   validation_batches: 2
   patience: 10
@@ -27,12 +27,12 @@ training_info:
 experiment:
   project_name: "DEF"
   experiment_name: "paradis-diffusion-5deg-smoke"
-  save_path: "outputs/paradis-diffusion-5deg-smoke/"
+  save_path: "${oc.env:SCRATCH,/scratch/dmillard}/def-era/outputs/paradis-diffusion-5deg-smoke/"
   from_checkpoint: null
   from_state: null
 
 dataset:
-  root_dir: "ERA5/5.65deg"
+  root_dir: "${oc.env:SCRATCH,/scratch/dmillard}/def-era/ERA5/5.65deg"
   time_resolution: 6h
   forecast_steps: 1
   timestep: 1000
@@ -172,3 +172,10 @@ features:
   output:
     atmospheric: ${features.base.atmospheric}
     surface: ${features.base.surface}
+
+hydra:
+  run:
+    dir: ${oc.env:SCRATCH,/scratch/dmillard}/def-era/hydra/run
+  sweep:
+    dir: ${oc.env:SCRATCH,/scratch/dmillard}/def-era/hydra_sweeps
+    subdir: job

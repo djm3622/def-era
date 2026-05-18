@@ -4,6 +4,7 @@ outputs/
 wandb/
 config_temp.yaml
 _output/
+*.sh
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

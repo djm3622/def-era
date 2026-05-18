@@ -13,6 +13,7 @@ from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
 from model.utility import save_training_state
+from utils.wandb_helper import log_losses
 
 
 def _diffusion_step(
@@ -166,6 +167,13 @@ def training_loop(
             f"valid_loss={valid_loss if valid_loss is not None else 'n/a'}, "
             f"elapsed={elapsed:.2f}s"
         )
+
+        if accelerator.is_main_process:
+            log_losses(
+                train_loss=gathered_train_loss,
+                valid_loss=valid_loss,
+                step=epoch,
+            )
 
         accelerator.wait_for_everyone()
         save_training_state(

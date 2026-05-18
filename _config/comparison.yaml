@@ -7,12 +7,12 @@ runs:
      
   # checkpoints must be absolute, each dir has (deterministic.pth, diffusion.pth, truth.pth)
   ckpts:
-    - "/data/users/jupyter-dam724/def-era/outputs/10steps-1walks-0.5guidance-newvis/history"
-    - "/data/users/jupyter-dam724/def-era/outputs/10steps-3walks-0.5guidance-newvis/history"
-    - "/data/users/jupyter-dam724/def-era/outputs/10steps-7walks-0.5guidance-newvis/history"
+    - "${oc.env:SCRATCH,/scratch/dmillard}/def-era/outputs/10steps-1walks-0.5guidance-newvis/history"
+    - "${oc.env:SCRATCH,/scratch/dmillard}/def-era/outputs/10steps-3walks-0.5guidance-newvis/history"
+    - "${oc.env:SCRATCH,/scratch/dmillard}/def-era/outputs/10steps-7walks-0.5guidance-newvis/history"
   
 evaluation:
-  save_path: "outputs/comparison_walks"
+  save_path: "${oc.env:SCRATCH,/scratch/dmillard}/def-era/outputs/comparison_walks"
 
   start_time: 50
   iterations: 40
@@ -51,7 +51,7 @@ evaluation:
   
 # Input dataset
 dataset:
-  root_dir: ERA5/5.65deg
+  root_dir: ${oc.env:SCRATCH,/scratch/dmillard}/def-era/ERA5/5.65deg
   time_resolution: 6h              # Time between two consecutive samples
   forecast_steps: 1                # Number of autoregressive steps for forecasting
   timestep: 1000
@@ -140,3 +140,9 @@ features:
     atmospheric: ${features.base.atmospheric}
     surface: ${features.base.surface}
 
+hydra:
+  run:
+    dir: ${oc.env:SCRATCH,/scratch/dmillard}/def-era/hydra/run
+  sweep:
+    dir: ${oc.env:SCRATCH,/scratch/dmillard}/def-era/hydra_sweeps
+    subdir: job

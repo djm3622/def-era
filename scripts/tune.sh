@@ -1,8 +1,12 @@
 #!/bin/bash
+set -euo pipefail
 
-# Define paths - MODIFY THESE
-CONFIG_PATH="/data/users/jupyter-dam724/def-era/config/diffusion.yaml"
-EVAL_SCRIPT="/data/users/jupyter-dam724/def-era/diffusion_eval.py"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+STORAGE_ROOT="${DEF_ERA_STORAGE_ROOT:-${SCRATCH:-/scratch/dmillard}/def-era}"
+
+CONFIG_PATH="${CONFIG_PATH:-$PROJECT_ROOT/_config/diffusion.yaml}"
+EVAL_SCRIPT="${EVAL_SCRIPT:-$PROJECT_ROOT/diffusion_eval.py}"
 
 # Define parameter variations
 SAMPLERS=("DPM++" "DDIM")
@@ -14,7 +18,9 @@ ALGORITHM_TYPES=("dpmsolver++")
 NUM_STEPS=(10 25 50 100)
 
 # Root directory for outputs
-ROOT_DIR="/data/users/jupyter-dam724/def-era/outputs/run02/"
+ROOT_DIR="${ROOT_DIR:-$STORAGE_ROOT/outputs/run02}"
+TEMP_CONFIG="$STORAGE_ROOT/tmp/config_temp.yaml"
+mkdir -p "$(dirname "$TEMP_CONFIG")"
 
 # Function to update yaml value - always with evaluation indentation
 update_yaml() {
@@ -25,7 +31,7 @@ update_yaml() {
 }
 
 # Make a copy of the original config
-cp "$CONFIG_PATH" config_temp.yaml
+cp "$CONFIG_PATH" "$TEMP_CONFIG"
 
 # Nested loops for parameter combinations
 for sampler in "${SAMPLERS[@]}"; do
@@ -40,17 +46,17 @@ for sampler in "${SAMPLERS[@]}"; do
                             mkdir -p "$OUTPUT_DIR"
                             
                             # Update config file
-                            update_yaml "sampler" "\"$sampler\"" config_temp.yaml
-                            update_yaml "walks" "$walk" config_temp.yaml
-                            update_yaml "guidance_scale" "$guidance" config_temp.yaml
-                            update_yaml "eta" "$eta" config_temp.yaml
-                            update_yaml "num_steps" "$num_step" config_temp.yaml
-                            update_yaml "solver_order" "1" config_temp.yaml
-                            update_yaml "algorithm_type" "\"dpmsolver\"" config_temp.yaml
-                            update_yaml "save_path" "'${OUTPUT_DIR}/'" config_temp.yaml
+                            update_yaml "sampler" "\"$sampler\"" "$TEMP_CONFIG"
+                            update_yaml "walks" "$walk" "$TEMP_CONFIG"
+                            update_yaml "guidance_scale" "$guidance" "$TEMP_CONFIG"
+                            update_yaml "eta" "$eta" "$TEMP_CONFIG"
+                            update_yaml "num_steps" "$num_step" "$TEMP_CONFIG"
+                            update_yaml "solver_order" "1" "$TEMP_CONFIG"
+                            update_yaml "algorithm_type" "\"dpmsolver\"" "$TEMP_CONFIG"
+                            update_yaml "save_path" "'${OUTPUT_DIR}/'" "$TEMP_CONFIG"
                             
                             # Copy current config to output directory
-                            cp config_temp.yaml "${OUTPUT_DIR}/config.yaml"
+                            cp "$TEMP_CONFIG" "${OUTPUT_DIR}/config.yaml"
                             
                             echo "Running evaluation with parameters:"
                             echo "Sampler: $sampler"
@@ -82,17 +88,17 @@ for sampler in "${SAMPLERS[@]}"; do
                                 mkdir -p "$OUTPUT_DIR"
                                 
                                 # Update config file
-                                update_yaml "sampler" "\"$sampler\"" config_temp.yaml
-                                update_yaml "walks" "$walk" config_temp.yaml
-                                update_yaml "guidance_scale" "$guidance" config_temp.yaml
-                                update_yaml "eta" "0.0" config_temp.yaml
-                                update_yaml "num_steps" "$num_step" config_temp.yaml
-                                update_yaml "solver_order" "$solver_order" config_temp.yaml
-                                update_yaml "algorithm_type" "\"$algorithm_type\"" config_temp.yaml
-                                update_yaml "save_path" "'${OUTPUT_DIR}/'" config_temp.yaml
+                                update_yaml "sampler" "\"$sampler\"" "$TEMP_CONFIG"
+                                update_yaml "walks" "$walk" "$TEMP_CONFIG"
+                                update_yaml "guidance_scale" "$guidance" "$TEMP_CONFIG"
+                                update_yaml "eta" "0.0" "$TEMP_CONFIG"
+                                update_yaml "num_steps" "$num_step" "$TEMP_CONFIG"
+                                update_yaml "solver_order" "$solver_order" "$TEMP_CONFIG"
+                                update_yaml "algorithm_type" "\"$algorithm_type\"" "$TEMP_CONFIG"
+                                update_yaml "save_path" "'${OUTPUT_DIR}/'" "$TEMP_CONFIG"
                                 
                                 # Copy current config to output directory
-                                cp config_temp.yaml "${OUTPUT_DIR}/config.yaml"
+                                cp "$TEMP_CONFIG" "${OUTPUT_DIR}/config.yaml"
                                 
                                 echo "Running evaluation with parameters:"
                                 echo "Sampler: $sampler"
@@ -124,4 +130,4 @@ for sampler in "${SAMPLERS[@]}"; do
 done
 
 # Clean up
-rm config_temp.yaml
+rm "$TEMP_CONFIG"

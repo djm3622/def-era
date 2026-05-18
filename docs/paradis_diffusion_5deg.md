@@ -22,24 +22,24 @@ This branch adds the first PARADIS-backed diffusion training path.
 - Adds a PARADIS adapter that uses the upstream PARADIS model as a conditional diffusion denoiser.
 - Adds `paradis_diffusion_trainer.py` and `_config/paradis_diffusion.yaml`.
 
-The trainer targets a PARADIS-compatible processed zarr at `ERA5/5.65deg`.
+The trainer targets a PARADIS-compatible processed zarr at
+`$SCRATCH/def-era/ERA5/5.65deg`.
 
 ## Data
 
-No data is downloaded by this branch setup.
+If `$SCRATCH/def-era/ERA5/5.65deg` already exists and contains the PARADIS
+variable set, run the trainer against it directly.
 
-If `ERA5/5.65deg` already exists and contains the PARADIS variable set, run the
-trainer against it directly.
-
-To prepare the 5-degree data manually:
+To download raw WeatherBench2 data when needed and prepare the 5-degree data:
 
 ```bash
-bash scripts/prepare_paradis_5deg.sh ERA5/5.625deg_wb2 ERA5/5.65deg 2010 2011
+bash scripts/prepare_paradis_5deg.sh "$SCRATCH/def-era/ERA5/5.625deg_wb2" "$SCRATCH/def-era/ERA5/5.65deg" 2010 2011
 ```
 
-That wrapper does not download data. It expects the raw WeatherBench2 zarr to
-already exist, then uses the PARADIS preprocessor to produce fields such as
-`vertical_velocity` and `wind_z_10m` plus PARADIS static geometry channels.
+That wrapper downloads the raw WeatherBench2 zarr variables required by PARADIS
+if `$SCRATCH/def-era/ERA5/5.625deg_wb2` is missing, then uses the PARADIS
+preprocessor to produce fields such as `vertical_velocity` and `wind_z_10m`
+plus PARADIS static geometry channels.
 
 ## Smoke Training
 
@@ -51,7 +51,7 @@ Useful overrides:
 
 ```bash
 accelerate launch --config_file _config/accelerator.yaml paradis_diffusion_trainer.py \
-  dataset.root_dir=/path/to/ERA5/5.65deg \
+  dataset.root_dir="$SCRATCH/def-era/ERA5/5.65deg" \
   training_info.epochs=1 \
   distributed_training.total_batch_size=1 \
   distributed_training.workers=0
