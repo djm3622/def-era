@@ -5,6 +5,10 @@ wandb/
 config_temp.yaml
 _output/
 *.sh
+docs/paradis_diffusion_5deg.md
+docs/paradis_diffusion_branch_knowledge.md
+data_viz.ipynb
+testing.ipynb
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

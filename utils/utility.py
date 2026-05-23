@@ -29,17 +29,16 @@ def set_random_seeds(seed: int) -> None:
     random.seed(seed)
     np.random.seed(seed)
 
-def validate_and_create_save_path(save_path, experiment_name):
+def validate_and_create_save_path(save_path: str, experiment_name: str) -> None:
     if experiment_name is None:
         raise ValueError("experiment_name must be set before validating save path")
 
-    # Check if the path already exists
-    if os.path.exists(save_path):
-        raise AssertionError(f"Save path '{save_path}' already exists. Please choose a different experiment name.")
+    if os.path.exists(save_path) and not os.path.isdir(save_path):
+        raise NotADirectoryError(f"Save path '{save_path}' exists but is not a directory.")
 
     # Create the directory and any necessary parent directories
     try:
-        os.makedirs(save_path, exist_ok=False)
+        os.makedirs(save_path, exist_ok=True)
     except Exception as e:
         raise RuntimeError(f"Failed to create save directory: {str(e)}")
         

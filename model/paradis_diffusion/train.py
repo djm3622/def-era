@@ -16,6 +16,209 @@ from model.utility import save_training_state
 from utils.wandb_helper import log_losses
 
 
+def _feature_names(config: DictConfig) -> list[str]:
+    """Return channel names in the same order as the stacked dataset."""
+
+    names = []
+    for variable in config.features.base.atmospheric:
+        for level in config.features.pressure_levels:
+            names.append(f"{variable}_h{int(level)}")
+    names.extend(str(variable) for variable in config.features.base.surface)
+    return names
+
+
+def _standardize_spatial(x: torch.Tensor) -> torch.Tensor:
+    mean = x.mean(dim=(-2, -1), keepdim=True)
+    std = x.std(dim=(-2, -1), keepdim=True).clamp_min(1.0e-6)
+    return (x - mean) / std
+
+
+@torch.no_grad()
+def _sample_with_cfg_ddim(
+    model: Module,
+    condition: torch.Tensor,
+    constants: torch.Tensor,
+    alpha_bar: torch.Tensor,
+    t_timesteps: int,
+    guidance_scale: float,
+    num_steps: int,
+    eta: float,
+    corrector: bool,
+    generator: Optional[torch.Generator],
+    loading_bar: bool,
+    accelerator: Accelerator,
+) -> torch.Tensor:
+    """Generate denoised examples from a fixed validation condition batch."""
+
+    num_steps = max(1, min(int(num_steps), int(t_timesteps)))
+    samples = torch.randn(
+        condition.shape,
+        device=condition.device,
+        dtype=condition.dtype,
+        generator=generator,
+    )
+    step_indices = torch.linspace(
+        t_timesteps - 1,
+        0,
+        num_steps,
+        dtype=torch.long,
+        device=condition.device,
+    )
+
+    sample_bar = tqdm(
+        enumerate(step_indices),
+        total=len(step_indices),
+        desc="Saving PARADIS diffusion samples",
+        leave=False,
+        disable=not (loading_bar and accelerator.is_main_process),
+        mininterval=1.0,
+    )
+
+    for step_offset, step in sample_bar:
+        batch_size = condition.shape[0]
+        timesteps = torch.full(
+            (batch_size,),
+            int(step.item()),
+            dtype=torch.long,
+            device=condition.device,
+        )
+        double_timesteps = torch.cat([timesteps, timesteps], dim=0)
+        double_condition = torch.cat([condition, torch.zeros_like(condition)], dim=0)
+        double_constants = torch.cat([constants, constants], dim=0)
+        double_samples = torch.cat([samples, samples], dim=0)
+
+        noise_pred = model(
+            condition=double_condition,
+            noisy_state=double_samples,
+            timesteps=double_timesteps,
+            constants=double_constants,
+            return_dict=False,
+        )[0]
+        noise_pred_cond, noise_pred_uncond = torch.chunk(noise_pred, 2, dim=0)
+        noise_pred = noise_pred_uncond + guidance_scale * (
+            noise_pred_cond - noise_pred_uncond
+        )
+
+        alpha_bar_t = alpha_bar[step].view(1, 1, 1, 1)
+        if step_offset + 1 < len(step_indices):
+            prev_step = step_indices[step_offset + 1]
+            alpha_bar_prev = alpha_bar[prev_step].view(1, 1, 1, 1)
+        else:
+            alpha_bar_prev = torch.ones_like(alpha_bar_t)
+
+        predicted_x0 = (
+            samples - torch.sqrt(1.0 - alpha_bar_t) * noise_pred
+        ) / torch.sqrt(alpha_bar_t)
+        variance = (
+            (1.0 - alpha_bar_prev)
+            / (1.0 - alpha_bar_t)
+            * (1.0 - alpha_bar_t / alpha_bar_prev)
+        ).clamp_min(0.0)
+        sigma_t = float(eta) * torch.sqrt(variance)
+
+        if eta > 0.0 and step_offset + 1 < len(step_indices):
+            noise = torch.randn(
+                samples.shape,
+                device=samples.device,
+                dtype=samples.dtype,
+                generator=generator,
+            )
+        else:
+            noise = torch.zeros_like(samples)
+
+        direction_scale = (1.0 - alpha_bar_prev - sigma_t.square()).clamp_min(0.0)
+        samples = (
+            torch.sqrt(alpha_bar_prev) * predicted_x0
+            + torch.sqrt(direction_scale) * noise_pred
+            + sigma_t * noise
+        )
+
+        if corrector:
+            samples = _standardize_spatial(samples)
+
+    return samples
+
+
+@torch.no_grad()
+def _save_validation_samples(
+    valid: DataLoader,
+    model: Module,
+    alpha_bar: torch.Tensor,
+    t_timesteps: int,
+    save_path: str,
+    epoch: int,
+    epochs: int,
+    config: DictConfig,
+    accelerator: Accelerator,
+    loading_bar: bool,
+) -> None:
+    sample_cfg = config.get("sampling", {})
+    if not sample_cfg or not bool(sample_cfg.get("enabled", False)):
+        return
+
+    epoch_number = epoch + 1
+    interval = max(1, int(sample_cfg.get("interval", 1)))
+    should_sample = (
+        epoch_number == 1
+        or epoch_number == epochs
+        or epoch_number % interval == 0
+    )
+    if not should_sample:
+        return
+
+    sample_dir = os.path.join(save_path, str(sample_cfg.get("save_dir", "samples")))
+    if accelerator.is_main_process:
+        os.makedirs(sample_dir, exist_ok=True)
+    accelerator.wait_for_everyone()
+
+    model.eval()
+    clean_states, constants, _, _ = next(iter(valid))
+    num_samples = min(int(sample_cfg.get("num_samples", 4)), clean_states.shape[0])
+    clean_states = clean_states[:num_samples]
+    constants = constants[:num_samples]
+
+    generator = torch.Generator(device=accelerator.device)
+    generator.manual_seed(int(sample_cfg.get("seed", 1000)))
+
+    samples = _sample_with_cfg_ddim(
+        model=model,
+        condition=clean_states,
+        constants=constants,
+        alpha_bar=alpha_bar,
+        t_timesteps=t_timesteps,
+        guidance_scale=float(sample_cfg.get("guidance_scale", 1.0)),
+        num_steps=int(sample_cfg.get("num_steps", 50)),
+        eta=float(sample_cfg.get("eta", 0.0)),
+        corrector=bool(sample_cfg.get("corrector", True)),
+        generator=generator,
+        loading_bar=loading_bar,
+        accelerator=accelerator,
+    )
+    model.train()
+
+    if accelerator.is_main_process:
+        payload = {
+            "epoch": epoch,
+            "epoch_number": epoch_number,
+            "samples": samples.detach().float().cpu(),
+            "condition": clean_states.detach().float().cpu(),
+            "target": clean_states.detach().float().cpu(),
+            "feature_names": _feature_names(config),
+            "sampling": {
+                "sampler": "DDIM",
+                "num_steps": int(sample_cfg.get("num_steps", 50)),
+                "guidance_scale": float(sample_cfg.get("guidance_scale", 1.0)),
+                "eta": float(sample_cfg.get("eta", 0.0)),
+                "corrector": bool(sample_cfg.get("corrector", True)),
+                "seed": int(sample_cfg.get("seed", 1000)),
+            },
+        }
+        output_file = os.path.join(sample_dir, f"epoch_{epoch_number:06d}.pt")
+        accelerator.save(payload, output_file)
+
+    accelerator.wait_for_everyone()
+
+
 def _diffusion_step(
     batch,
     model: Module,
@@ -175,6 +378,19 @@ def training_loop(
                 step=epoch,
             )
 
+        accelerator.wait_for_everyone()
+        _save_validation_samples(
+            valid=valid,
+            model=model,
+            alpha_bar=alpha_bar,
+            t_timesteps=t_timesteps,
+            save_path=save_path,
+            epoch=epoch,
+            epochs=epochs,
+            config=config,
+            accelerator=accelerator,
+            loading_bar=loading_bar,
+        )
         accelerator.wait_for_everyone()
         save_training_state(
             accelerator=accelerator,

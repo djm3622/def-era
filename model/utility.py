@@ -42,7 +42,7 @@ def load_training_state(accelerator, checkpoint_path, model, optimizer, schedule
     if scheduler is not None:
         scheduler.load_state_dict(state['scheduler_state_dict'])
     
-    return int(state['epoch'])
+    return int(state['epoch']) + 1
         
         
 def save_training_state(accelerator, epoch, model, optimizer, scheduler, output_dir):

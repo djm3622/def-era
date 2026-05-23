@@ -43,6 +43,10 @@ def init_wandb(
         config_class: Configuration class instance
         save_path: Path to save configuration to locally
     """
+    save_dir = Path(save_path)
+    save_dir.mkdir(parents=True, exist_ok=True)
+    config_path = save_dir / 'config_mod.yaml'
+
     # Convert config class to dictionary
     config_dict = _convert_config_to_dict(config_class)
 
@@ -67,11 +71,11 @@ def init_wandb(
     wandb.config.update(config_dict)
     
     # Save locally as YAML
-    with open(save_path+'config_mod.yaml', 'w') as f:
+    with open(config_path, 'w') as f:
         yaml.dump(config_dict, f, default_flow_style=False, sort_keys=False)
     
     # Upload to wandb
-    wandb.save(save_path+'config_mod.yaml')
+    wandb.save(str(config_path))
     
     # Also log config as wandb summary
     wandb.summary.update({"model_config": config_dict})
@@ -143,17 +147,18 @@ def save_model_architecture(model: torch.nn.Module, save_path: str) -> None:
         model: PyTorch model
         save_path: Path where to save the architecture file
     """
-    # Create directory if it doesn't exist
-    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    save_dir = Path(save_path)
+    save_dir.mkdir(parents=True, exist_ok=True)
+    architecture_path = save_dir / 'arch.txt'
     
     # Get model architecture as string
     model_str = str(model)
     
     # Save to file
-    with open(save_path+'arch.txt', 'w') as f:
+    with open(architecture_path, 'w') as f:
         f.write(model_str)
         
-    wandb.save(save_path+'arch.txt')
+    wandb.save(str(architecture_path))
     
     # Also log as a wandb summary
     wandb.summary['model_architecture'] = model_str

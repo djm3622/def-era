@@ -72,7 +72,7 @@ The preparation wrapper downloads the raw PARADIS WeatherBench2 inputs when the
 raw directory is missing, then preprocesses them on scratch:
 
 ```bash
-bash scripts/prepare_paradis_5deg.sh "$SCRATCH/def-era/ERA5/5.625deg_wb2" "$SCRATCH/def-era/ERA5/5.65deg" 2010 2011
+bash scripts/prepare_paradis_5deg.sh "$SCRATCH/def-era/ERA5/5.625deg_wb2" "$SCRATCH/def-era/ERA5/5.65deg" 1959 2023
 ```
 
 That script:
@@ -197,18 +197,29 @@ The default save path is:
 
 ```yaml
 experiment:
-  save_path: "${oc.env:SCRATCH,/scratch/dmillard}/def-era/outputs/paradis-diffusion-5deg-smoke/"
+  save_path: "${oc.env:SCRATCH,/scratch/dmillard}/def-era/outputs/paradis-diffusion-5deg/"
 ```
 
-## Default Smoke Configuration
+The loop also saves validation examples and generated DDIM samples under:
 
-The current config is sized as a smoke-training path rather than a paper-scale run:
+```text
+<experiment.save_path>/samples/epoch_<n>.pt
+```
 
-- 5 epochs
-- train window: `2010-01-01` to `2010-01-31`
-- validation window: `2011-01-01` to `2011-01-07`
-- total batch size 2
-- validation limited to 2 batches
+Each sample artifact contains generated `samples`, the validation `condition`,
+the clean `target`, channel-aligned `feature_names`, and the DDIM sampling
+settings.
+
+## Default Full-Run Configuration
+
+The current config is sized for the full 5-degree training path:
+
+- 300 epochs
+- train window: `1960-01-01` to `2014-12-31`
+- validation window: `2015-01-01` to `2023-01-10`
+- total batch size 64
+- validation limited to 64 batches per epoch
+- sample artifacts saved at epoch 1, every 5 epochs, and the final epoch
 - `mixed_precision: "fp16"`
 - PARADIS latent size 128
 - PARADIS `num_layers: 2`
@@ -246,5 +257,5 @@ The requirements pin `numpy==2.2.6`, `pandas==2.2.3`, `wandb==0.18.7`, and use `
 - The PARADIS residual forecast pathway is disabled by construction through zero-valued residual input channels.
 - The code assumes the PARADIS submodule is present at `paradis/`.
 - The config and docs target 5-degree processed data at `$SCRATCH/def-era/ERA5/5.65deg`.
-- Validation reports a limited MSE noise-prediction loss, not forecast skill.
+- Validation reports a limited MSE noise-prediction loss and saved denoising examples, not forecast skill.
 - The training loop saves state every epoch but does not currently implement early stopping despite `training_info.patience` being present in the config.

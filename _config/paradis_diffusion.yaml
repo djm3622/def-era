@@ -7,10 +7,10 @@ paradis_diffusion:
 
 distributed_training:
   num_processes: 1
-  total_batch_size: 8
-  workers_per_gpu: 2
-  workers: 2
-  grad_accumulate: 4
+  total_batch_size: 64
+  workers_per_gpu: 4
+  workers: 8
+  grad_accumulate: 1
   mixed_precision: "fp16"
 
 optimization:
@@ -19,17 +19,28 @@ optimization:
   lr: 1.0e-5
 
 training_info:
-  epochs: 20
-  validation_delay: 1
-  validation_batches: 2
+  epochs: 300
+  validation_delay: 10
+  validation_batches: 32
   patience: 10
 
 experiment:
   project_name: "DEF"
-  experiment_name: "paradis-diffusion-5deg-smoke"
-  save_path: "${oc.env:SCRATCH,/scratch/dmillard}/def-era/outputs/paradis-diffusion-5deg-smoke/"
+  experiment_name: "paradis-diffusion-5deg"
+  save_path: "${oc.env:SCRATCH,/scratch/dmillard}/def-era/outputs/paradis-diffusion-5deg/"
   from_checkpoint: null
   from_state: null
+
+sampling:
+  enabled: true
+  interval: 5
+  num_samples: 4
+  num_steps: 50
+  guidance_scale: 0.7
+  eta: 0.0
+  corrector: true
+  seed: 1000
+  save_dir: "samples"
 
 dataset:
   root_dir: "${oc.env:SCRATCH,/scratch/dmillard}/def-era/ERA5/5.65deg"
@@ -44,12 +55,12 @@ training:
   gamma: 0.99
 
   dataset:
-    start_date: 2010-01-01
-    end_date: 2010-01-31
+    start_date: 1960-01-01
+    end_date: 2014-12-31
 
   validation_dataset:
-    start_date: 2011-01-01
-    end_date: 2011-01-07
+    start_date: 2015-01-01
+    end_date: 2023-01-10
 
   variable_loss_weights:
     atmospheric:

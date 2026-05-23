@@ -4,14 +4,14 @@ set -euo pipefail
 env_dir="${1:-.conda}"
 
 if ! command -v conda >/dev/null 2>&1; then
-    if command -v module >/dev/null 2>&1; then
-        module load mambaforge3/22.11.1-2
+    if [[ -n "${CONDA_MODULE:-}" ]] && command -v module >/dev/null 2>&1; then
+        module load "$CONDA_MODULE"
     fi
 fi
 
 if [[ ! -d "$env_dir" ]]; then
     if ! command -v conda >/dev/null 2>&1; then
-        echo "conda is not available. Load a conda/mambaforge module first." >&2
+        echo "conda is not available. Load a conda/mambaforge module first, or set CONDA_MODULE to the site-specific module name." >&2
         exit 1
     fi
 

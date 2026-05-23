@@ -1,4 +1,5 @@
 import logging
+from contextlib import suppress
 
 import hydra
 from accelerate import Accelerator
@@ -39,104 +40,120 @@ def main(cfg: DictConfig) -> None:
         mixed_precision=cfg.distributed_training.get("mixed_precision", "fp16"),
     )
 
-    utility.set_random_seeds(int(cfg.training.seed))
+    wandb_initialized = False
+    completed = False
+    try:
+        utility.set_random_seeds(int(cfg.training.seed))
 
-    if accelerator.is_main_process:
-        utility.validate_and_create_save_path(
-            cfg.experiment.save_path,
-            cfg.experiment.experiment_name,
+        if accelerator.is_main_process:
+            utility.validate_and_create_save_path(
+                cfg.experiment.save_path,
+                cfg.experiment.experiment_name,
+            )
+            wbhelp.init_wandb(
+                project_name=cfg.experiment.project_name,
+                run_name=cfg.experiment.experiment_name,
+                config_class=cfg,
+                save_path=save_path,
+            )
+            wandb_initialized = True
+
+        train_dataset = data.ERA5ParadisDiffusionDataset(
+            root_dir=cfg.dataset.root_dir,
+            start_date=cfg.training.dataset.start_date,
+            end_date=cfg.training.dataset.end_date,
+            timesteps=cfg.dataset.timestep,
+            cfg=cfg,
         )
-        wbhelp.init_wandb(
-            project_name=cfg.experiment.project_name,
-            run_name=cfg.experiment.experiment_name,
-            config_class=cfg,
-            save_path=save_path,
+        valid_dataset = data.ERA5ParadisDiffusionDataset(
+            root_dir=cfg.dataset.root_dir,
+            start_date=cfg.training.validation_dataset.start_date,
+            end_date=cfg.training.validation_dataset.end_date,
+            timesteps=cfg.dataset.timestep,
+            cfg=cfg,
         )
 
-    train_dataset = data.ERA5ParadisDiffusionDataset(
-        root_dir=cfg.dataset.root_dir,
-        start_date=cfg.training.dataset.start_date,
-        end_date=cfg.training.dataset.end_date,
-        timesteps=cfg.dataset.timestep,
-        cfg=cfg,
-    )
-    valid_dataset = data.ERA5ParadisDiffusionDataset(
-        root_dir=cfg.dataset.root_dir,
-        start_date=cfg.training.validation_dataset.start_date,
-        end_date=cfg.training.validation_dataset.end_date,
-        timesteps=cfg.dataset.timestep,
-        cfg=cfg,
-    )
+        sample_state, sample_constants, _, _ = train_dataset[0]
+        channels, _, _ = sample_state.shape
 
-    sample_state, sample_constants, _, _ = train_dataset[0]
-    channels, _, _ = sample_state.shape
+        diffusion_model = paradis_model.get_paradis_diffusion_model(
+            state_channels=channels,
+            static_channels=sample_constants.shape[0],
+            lat=train_dataset.lat,
+            lon=train_dataset.lon,
+            cfg=cfg,
+        )
+        if accelerator.is_main_process:
+            wbhelp.save_model_architecture(diffusion_model, cfg.experiment.save_path)
 
-    diffusion_model = paradis_model.get_paradis_diffusion_model(
-        state_channels=channels,
-        static_channels=sample_constants.shape[0],
-        lat=train_dataset.lat,
-        lon=train_dataset.lon,
-        cfg=cfg,
-    )
-    if accelerator.is_main_process:
-        wbhelp.save_model_architecture(diffusion_model, cfg.experiment.save_path)
+        if cfg.experiment.from_checkpoint is not None:
+            model_utility.load_model_weights(diffusion_model, cfg.experiment.from_checkpoint)
 
-    if cfg.experiment.from_checkpoint is not None:
-        model_utility.load_model_weights(diffusion_model, cfg.experiment.from_checkpoint)
+        optimizer = optimizers.get_adamw(diffusion_model, cfg.optimization.lr)
 
-    optimizer = optimizers.get_adamw(diffusion_model, cfg.optimization.lr)
+        train_dl = DataLoader(train_dataset, **_loader_kwargs(cfg, shuffle=True))
+        valid_dl = DataLoader(valid_dataset, **_loader_kwargs(cfg, shuffle=False))
 
-    train_dl = DataLoader(train_dataset, **_loader_kwargs(cfg, shuffle=True))
-    valid_dl = DataLoader(valid_dataset, **_loader_kwargs(cfg, shuffle=False))
+        scheduler = schedulers.get_onecycle_lr(
+            optimizer,
+            cfg.optimization.max_lr,
+            cfg.training_info.epochs,
+            len(train_dl),
+        )
 
-    scheduler = schedulers.get_onecycle_lr(
-        optimizer,
-        cfg.optimization.max_lr,
-        cfg.training_info.epochs,
-        len(train_dl),
-    )
-
-    train_dl, valid_dl, diffusion_model, optimizer, scheduler = accelerator.prepare(
-        train_dl,
-        valid_dl,
-        diffusion_model,
-        optimizer,
-        scheduler,
-    )
-
-    epoch_start = None
-    if cfg.experiment.from_state is not None:
-        epoch_start = model_utility.load_training_state(
-            accelerator,
-            cfg.experiment.from_state,
+        train_dl, valid_dl, diffusion_model, optimizer, scheduler = accelerator.prepare(
+            train_dl,
+            valid_dl,
             diffusion_model,
             optimizer,
             scheduler,
         )
-        accelerator.print(f"State loaded; resuming from epoch {epoch_start}.")
 
-    criterion = loss.get_diffusion_loss()
+        epoch_start = None
+        if cfg.experiment.from_state is not None:
+            epoch_start = model_utility.load_training_state(
+                accelerator,
+                cfg.experiment.from_state,
+                diffusion_model,
+                optimizer,
+                scheduler,
+            )
+            accelerator.print(f"State loaded; resuming from epoch {epoch_start}.")
 
-    training.training_loop(
-        accelerator=accelerator,
-        train=train_dl,
-        valid=valid_dl,
-        model=diffusion_model,
-        epochs=cfg.training_info.epochs,
-        criterion=criterion,
-        save_path=save_path,
-        optimizer=optimizer,
-        scheduler=scheduler,
-        t_timesteps=cfg.dataset.timestep,
-        condition_dropout=cfg.paradis_diffusion.condition_dropout,
-        validation_batches=cfg.training_info.validation_batches,
-        loading_bar=True,
-        epoch_start=0 if epoch_start is None else epoch_start,
-        config=cfg,
-    )
+        criterion = loss.get_diffusion_loss()
 
-    if accelerator.is_main_process:
-        wbhelp.finish_run()
+        training.training_loop(
+            accelerator=accelerator,
+            train=train_dl,
+            valid=valid_dl,
+            model=diffusion_model,
+            epochs=cfg.training_info.epochs,
+            criterion=criterion,
+            save_path=save_path,
+            optimizer=optimizer,
+            scheduler=scheduler,
+            t_timesteps=cfg.dataset.timestep,
+            condition_dropout=cfg.paradis_diffusion.condition_dropout,
+            validation_batches=cfg.training_info.validation_batches,
+            loading_bar=True,
+            epoch_start=0 if epoch_start is None else epoch_start,
+            config=cfg,
+        )
+
+        completed = True
+    finally:
+        if completed:
+            try:
+                if accelerator.is_main_process and wandb_initialized:
+                    wbhelp.finish_run()
+            finally:
+                accelerator.end_training()
+        else:
+            if accelerator.is_main_process and wandb_initialized:
+                with suppress(Exception):
+                    wbhelp.finish_run()
+            with suppress(Exception):
+                accelerator.end_training()
 
 
 if __name__ == "__main__":

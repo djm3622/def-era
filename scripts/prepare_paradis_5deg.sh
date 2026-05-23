@@ -9,7 +9,7 @@ Usage:
   bash scripts/prepare_paradis_5deg.sh RAW_ZARR_DIR PROCESSED_DIR [BEGIN_YEAR] [END_YEAR]
 
 Example:
-  bash scripts/prepare_paradis_5deg.sh "$SCRATCH/def-era/ERA5/5.625deg_wb2" "$SCRATCH/def-era/ERA5/5.65deg" 2010 2011
+  bash scripts/prepare_paradis_5deg.sh "$SCRATCH/def-era/ERA5/5.625deg_wb2" "$SCRATCH/def-era/ERA5/5.65deg" 1959 2023
 
 Steps:
   1. Download the raw WeatherBench2 zarr if RAW_ZARR_DIR does not exist.
@@ -27,13 +27,15 @@ fi
 
 raw_dir="$1"
 processed_dir="$2"
-begin_year="${3:-2010}"
-end_year="${4:-2011}"
+begin_year="${3:-1959}"
+end_year="${4:-2023}"
 python_bin="${PYTHON:-}"
 
 if [[ -z "$python_bin" ]]; then
     if [[ -x "$PWD/.conda/bin/python3.12" ]]; then
         python_bin="$PWD/.conda/bin/python3.12"
+    elif [[ -x "${DEF_ERA_STORAGE_ROOT:-${SCRATCH:-/scratch/dmillard}/def-era}/.conda/bin/python3.12" ]]; then
+        python_bin="${DEF_ERA_STORAGE_ROOT:-${SCRATCH:-/scratch/dmillard}/def-era}/.conda/bin/python3.12"
     else
         python_bin="python3"
     fi
@@ -47,13 +49,44 @@ fi
 
 echo "Using existing raw zarr at $raw_dir."
 echo "Preprocessing $raw_dir -> $processed_dir."
+
+chunk_years="${PREPROCESS_CHUNK_YEARS:-5}"
+if (( chunk_years < 1 )); then
+    echo "PREPROCESS_CHUNK_YEARS must be >= 1." >&2
+    exit 1
+fi
+
+year="$begin_year"
+while (( year <= end_year )); do
+    chunk_end=$((year + chunk_years - 1))
+    if (( chunk_end > end_year )); then
+        chunk_end="$end_year"
+    fi
+
+    echo "Writing yearly data for ${year}-${chunk_end}."
+    PYTHONPATH="$PWD/paradis/data:${PYTHONPATH:-}" "$python_bin" \
+        paradis/scripts/preprocess_weatherbench_data.py \
+        -i "$raw_dir" \
+        -o "$processed_dir" \
+        --remove-poles \
+        --begin_year "$year" \
+        --end_year "$chunk_end" \
+        --skip-static \
+        --skip-stats \
+        --skip-existing-years
+
+    year=$((chunk_end + 1))
+done
+
+echo "Writing constants and full-range statistics for ${begin_year}-${end_year}."
 PYTHONPATH="$PWD/paradis/data:${PYTHONPATH:-}" "$python_bin" \
     paradis/scripts/preprocess_weatherbench_data.py \
     -i "$raw_dir" \
     -o "$processed_dir" \
     --remove-poles \
     --begin_year "$begin_year" \
-    --end_year "$end_year"
+    --end_year "$end_year" \
+    --skip-stack
 
 cat <<EOF
 Done.
