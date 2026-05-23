@@ -52,21 +52,13 @@ accelerate launch \
   --num_processes 1 \
   paradis_diffusion_trainer.py \
   dataset.root_dir="$DATA_ROOT/5.65deg" \
-  experiment.save_path="$DEF_ERA_STORAGE_ROOT/outputs/test-run/" \
-  experiment.experiment_name=test-run \
-  training.dataset.start_date=2014-01-01 \
-  training.dataset.end_date=2014-01-07 \
-  training.validation_dataset.start_date=2015-01-01 \
-  training.validation_dataset.end_date=2015-01-07 \
-  training_info.epochs=1 \
-  training_info.validation_batches=1 \
-  distributed_training.total_batch_size=1 \
-  distributed_training.workers=0 \
-  sampling.enabled=false
+  experiment.experiment_name=paradis-diffusion-5deg \
+  experiment.save_path="$DEF_ERA_STORAGE_ROOT/outputs/paradis-diffusion-5deg/" \
+  distributed_training.mixed_precision=bf16
 ```
 
 Outputs will be written to:
 
 ```text
-$DEF_ERA_STORAGE_ROOT/outputs/test-run/
+$DEF_ERA_STORAGE_ROOT/outputs/paradis-diffusion-5deg/
 ```
