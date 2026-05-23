@@ -1,7 +1,4 @@
-# Collaborator Test Run
-
-These steps run the PARADIS diffusion trainer from the command line, without
-`sbatch`.
+# ECCC Test Run
 
 ## 1. Clone
 
@@ -36,7 +33,7 @@ export DEF_ERA_STORAGE_ROOT=/path/to/def-era-data
 export DATA_ROOT="$DEF_ERA_STORAGE_ROOT/ERA5"
 ```
 
-For a full run, use `1959 2023` instead.
+For a full run, use `1959 2023`.
 
 ```bash
 bash scripts/prepare_paradis_5deg.sh \
