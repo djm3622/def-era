@@ -46,6 +46,7 @@ class ParadisDiffusionDenoiser(nn.Module):
         lat: np.ndarray,
         lon: np.ndarray,
         cfg: DictConfig,
+        static_constants: Optional[torch.Tensor] = None,
         paradis_root: str = "paradis",
     ) -> None:
         super().__init__()
@@ -70,6 +71,25 @@ class ParadisDiffusionDenoiser(nn.Module):
         )
 
         self.paradis = Paradis(datamodule_spec, paradis_cfg, lat_grid, lon_grid)
+        if static_constants is not None:
+            if static_constants.ndim != 3:
+                raise ValueError(
+                    "static_constants must have shape "
+                    "[channels, latitude, longitude]."
+                )
+            if static_constants.shape[0] != static_channels:
+                raise ValueError(
+                    "static_constants channel count does not match "
+                    f"static_channels "
+                    f"({static_constants.shape[0]} != {static_channels})."
+                )
+            self.register_buffer(
+                "static_constants",
+                static_constants.detach().clone().float().unsqueeze(0),
+                persistent=False,
+            )
+        else:
+            self.register_buffer("static_constants", None, persistent=False)
 
     @property
     def device(self) -> torch.device:
@@ -92,9 +112,22 @@ class ParadisDiffusionDenoiser(nn.Module):
         return_dict: bool = False,
     ):
         if constants is None:
-            constants = condition.new_empty(
-                condition.shape[0], 0, condition.shape[-2], condition.shape[-1]
-            )
+            if self.static_constants is not None:
+                constants = self.static_constants.to(
+                    device=condition.device,
+                    dtype=condition.dtype,
+                ).expand(
+                    condition.shape[0],
+                    -1,
+                    -1,
+                    -1,
+                )
+            else:
+                constants = condition.new_empty(
+                    condition.shape[0], 0, condition.shape[-2], condition.shape[-1]
+                )
+        else:
+            constants = constants.to(device=condition.device, dtype=condition.dtype)
 
         zero_residual = torch.zeros_like(noisy_state)
         timestep_channel = self._time_channel(timesteps, noisy_state.shape)
@@ -121,6 +154,7 @@ def get_paradis_diffusion_model(
     lat: np.ndarray,
     lon: np.ndarray,
     cfg: DictConfig,
+    static_constants: Optional[torch.Tensor] = None,
 ) -> ParadisDiffusionDenoiser:
     return ParadisDiffusionDenoiser(
         state_channels=state_channels,
@@ -128,4 +162,5 @@ def get_paradis_diffusion_model(
         lat=lat,
         lon=lon,
         cfg=cfg,
+        static_constants=static_constants,
     )

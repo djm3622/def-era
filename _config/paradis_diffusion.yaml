@@ -10,6 +10,7 @@ distributed_training:
   total_batch_size: 64
   workers_per_gpu: 4
   workers: 8
+  prefetch_factor: 1
   grad_accumulate: 1
   mixed_precision: "fp16"
 
@@ -19,20 +20,20 @@ optimization:
   lr: 1.0e-5
 
 training_info:
-  epochs: 300
+  epochs: 1
   validation_delay: 10
-  validation_batches: 32
+  validation_batches: 0
   patience: 10
 
 experiment:
   project_name: "DEF"
-  experiment_name: "paradis-diffusion-5deg"
-  save_path: "${oc.env:SCRATCH,/scratch/dmillard}/def-era/outputs/paradis-diffusion-5deg/"
+  experiment_name: "paradis-diffusion-5deg-h100-benchmark-1epoch"
+  save_path: "${oc.env:SCRATCH,/scratch/dmillard}/def-era/outputs/paradis-diffusion-5deg-h100-benchmark-1epoch/"
   from_checkpoint: null
   from_state: null
 
 sampling:
-  enabled: true
+  enabled: false
   interval: 5
   num_samples: 4
   num_steps: 50
@@ -49,6 +50,7 @@ dataset:
   timestep: 1000
   beta_start: 1.0e-4
   beta_end: 0.02
+  validate_nan: false
 
 training:
   seed: 100

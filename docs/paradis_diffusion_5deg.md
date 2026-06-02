@@ -4,11 +4,10 @@ This branch trains a PARADIS-backed diffusion denoiser on the processed
 WeatherBench2/ERA5 5-degree layout.
 
 - Adds `paradis` as a git submodule.
-- Adds `ERA5ParadisDiffusionDataset`, which returns:
-  - normalized clean atmospheric/surface state
-  - static constants
-  - sampled Gaussian noise
-  - sampled diffusion timestep
+- Adds `ERA5ParadisDiffusionDataset`, which returns only normalized clean atmospheric/surface states.
+- Exposes static constants once through `dataset.static_constants`.
+- Loads PyTorch batches through one xarray/dask graph with `__getitems__`.
+- Samples Gaussian noise and diffusion timesteps on the accelerator device in the training step.
 - Adds a PARADIS adapter that uses the upstream PARADIS model as a conditional diffusion denoiser.
 - Adds `paradis_diffusion_trainer.py` and `_config/paradis_diffusion.yaml`.
 

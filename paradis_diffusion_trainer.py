@@ -28,6 +28,8 @@ def _loader_kwargs(cfg: DictConfig, shuffle: bool) -> dict:
     }
     if workers > 0:
         kwargs["persistent_workers"] = True
+        if "prefetch_factor" in cfg.distributed_training:
+            kwargs["prefetch_factor"] = int(cfg.distributed_training.prefetch_factor)
     return kwargs
 
 
@@ -73,15 +75,17 @@ def main(cfg: DictConfig) -> None:
             cfg=cfg,
         )
 
-        sample_state, sample_constants, _, _ = train_dataset[0]
+        sample_state = train_dataset[0]
+        static_constants = train_dataset.static_constants
         channels, _, _ = sample_state.shape
 
         diffusion_model = paradis_model.get_paradis_diffusion_model(
             state_channels=channels,
-            static_channels=sample_constants.shape[0],
+            static_channels=static_constants.shape[0],
             lat=train_dataset.lat,
             lon=train_dataset.lon,
             cfg=cfg,
+            static_constants=static_constants,
         )
         if accelerator.is_main_process:
             wbhelp.save_model_architecture(diffusion_model, cfg.experiment.save_path)

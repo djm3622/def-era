@@ -9,11 +9,13 @@ from data.era5_dataset import ERA5Dataset
 
 
 class ERA5ParadisDiffusionDataset(ERA5Dataset):
-    """Return normalized clean states plus PARADIS static channels.
+    """Return normalized clean states for PARADIS diffusion training.
 
-    The diffusion model should not consume WeatherBench dynamic forcings. This
-    dataset therefore returns only normalized state channels, static constants,
-    sampled Gaussian noise, and sampled diffusion timesteps.
+    The diffusion model should not consume WeatherBench dynamic forcings. To
+    keep data loading close to upstream PARADIS, workers only load and
+    normalize ERA5 state channels. Static constants are exposed once through
+    ``static_constants`` and diffusion noise/timesteps are generated on-device
+    inside the training step.
     """
 
     def __init__(
@@ -34,6 +36,7 @@ class ERA5ParadisDiffusionDataset(ERA5Dataset):
             cfg=cfg,
         )
         self.timesteps = timesteps
+        self.validate_nan = bool(cfg.get("dataset", {}).get("validate_nan", False))
         self._set_paradis_constants(cfg)
 
     def __len__(self):
@@ -93,6 +96,13 @@ class ERA5ParadisDiffusionDataset(ERA5Dataset):
             .reshape(self.lat_size, self.lon_size, -1)
             .unsqueeze(0)
         )
+        self._static_constants = self.constant_data.permute(0, 3, 1, 2).squeeze(0)
+
+    @property
+    def static_constants(self) -> torch.Tensor:
+        """Static PARADIS channels in ``[channels, latitude, longitude]`` order."""
+
+        return self._static_constants
 
     def _normalize_state(self, x: torch.Tensor) -> torch.Tensor:
         """Normalize all state channels using dataset statistics."""
@@ -114,21 +124,33 @@ class ERA5ParadisDiffusionDataset(ERA5Dataset):
 
         return x
 
-    def __getitem__(self, ind: int):
-        input_data = self.ds_input.isel(time=slice(ind, ind + 1))
+    def _load_clean_states(self, indices: list[int]) -> torch.Tensor:
+        """Load and normalize a batch of clean states with one dask graph."""
 
-        with dask.config.set(scheduler="single-threaded"):
-            input_data = dask.compute(input_data)[0]
+        time_indices = (
+            numpy.asarray([int(index) for index in indices], dtype=numpy.int64)
+            * self.interval_steps
+            + self._time_index_offset
+        )
+        input_data = self.ds_input.isel(time=time_indices)
 
-        if numpy.isnan(input_data.data).any():
+        (input_data,) = dask.compute(
+            input_data,
+            scheduler="synchronous",
+            traverse=False,
+        )
+
+        if self.validate_nan and numpy.isnan(input_data.data).any():
             raise ValueError("NaN values detected in input data")
 
         x = torch.as_tensor(input_data.data, dtype=self.dtype)
         x = self._normalize_state(x)
-        constants_grid = self.constant_data.permute(0, 3, 1, 2).squeeze(0)
-        x_grid = x.permute(0, 3, 1, 2).squeeze(0)
 
-        noisy_states = torch.randn_like(x_grid)
-        rand_timesteps = torch.randint(0, self.timesteps, (1,))
+        return x.permute(0, 3, 1, 2).float()
 
-        return x_grid, constants_grid, noisy_states, rand_timesteps
+    def __getitem__(self, ind: int):
+        return self._load_clean_states([int(ind)]).squeeze(0)
+
+    def __getitems__(self, indices: list[int]):
+        states = self._load_clean_states([int(index) for index in indices])
+        return list(states)

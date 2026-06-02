@@ -16,6 +16,16 @@ from model.utility import save_training_state
 from utils.wandb_helper import log_losses
 
 
+def _clean_states_from_batch(batch) -> torch.Tensor:
+    """Extract clean states from current or legacy diffusion batch layouts."""
+
+    if isinstance(batch, torch.Tensor):
+        return batch
+    if isinstance(batch, (tuple, list)) and batch:
+        return batch[0]
+    raise TypeError(f"Unsupported diffusion batch type: {type(batch)!r}")
+
+
 def _feature_names(config: DictConfig) -> list[str]:
     """Return channel names in the same order as the stacked dataset."""
 
@@ -37,7 +47,7 @@ def _standardize_spatial(x: torch.Tensor) -> torch.Tensor:
 def _sample_with_cfg_ddim(
     model: Module,
     condition: torch.Tensor,
-    constants: torch.Tensor,
+    constants: Optional[torch.Tensor],
     alpha_bar: torch.Tensor,
     t_timesteps: int,
     guidance_scale: float,
@@ -84,7 +94,11 @@ def _sample_with_cfg_ddim(
         )
         double_timesteps = torch.cat([timesteps, timesteps], dim=0)
         double_condition = torch.cat([condition, torch.zeros_like(condition)], dim=0)
-        double_constants = torch.cat([constants, constants], dim=0)
+        double_constants = (
+            torch.cat([constants, constants], dim=0)
+            if constants is not None
+            else None
+        )
         double_samples = torch.cat([samples, samples], dim=0)
 
         noise_pred = model(
@@ -172,10 +186,9 @@ def _save_validation_samples(
     accelerator.wait_for_everyone()
 
     model.eval()
-    clean_states, constants, _, _ = next(iter(valid))
+    clean_states = _clean_states_from_batch(next(iter(valid)))
     num_samples = min(int(sample_cfg.get("num_samples", 4)), clean_states.shape[0])
     clean_states = clean_states[:num_samples]
-    constants = constants[:num_samples]
 
     generator = torch.Generator(device=accelerator.device)
     generator.manual_seed(int(sample_cfg.get("seed", 1000)))
@@ -183,7 +196,7 @@ def _save_validation_samples(
     samples = _sample_with_cfg_ddim(
         model=model,
         condition=clean_states,
-        constants=constants,
+        constants=None,
         alpha_bar=alpha_bar,
         t_timesteps=t_timesteps,
         guidance_scale=float(sample_cfg.get("guidance_scale", 1.0)),
@@ -226,8 +239,14 @@ def _diffusion_step(
     alpha_bar: torch.Tensor,
     condition_dropout: float,
 ) -> torch.Tensor:
-    clean_states, constants, noise, timesteps = batch
-    timesteps = timesteps.squeeze(-1).long()
+    clean_states = _clean_states_from_batch(batch)
+    noise = torch.randn_like(clean_states)
+    timesteps = torch.randint(
+        0,
+        alpha_bar.numel(),
+        (clean_states.shape[0],),
+        device=clean_states.device,
+    )
     alpha_bar_t = alpha_bar[timesteps].view(-1, 1, 1, 1)
 
     null_mask = torch.rand(
@@ -247,7 +266,7 @@ def _diffusion_step(
         condition=condition,
         noisy_state=noisy_state,
         timesteps=timesteps,
-        constants=constants,
+        constants=None,
         return_dict=False,
     )[0]
 
@@ -316,6 +335,9 @@ def training_loop(
     model.train()
     for epoch in range(epoch_start, epochs):
         train_loss = 0.0
+        data_wait_time = 0.0
+        step_time = 0.0
+        batch_count = 0
         start_time = time.time()
 
         train_bar = tqdm(
@@ -326,7 +348,16 @@ def training_loop(
             mininterval=1.0,
         )
 
-        for train_batch in train_bar:
+        train_iter = iter(train_bar)
+        while True:
+            fetch_start = time.time()
+            try:
+                train_batch = next(train_iter)
+            except StopIteration:
+                break
+            data_wait_time += time.time() - fetch_start
+
+            step_start = time.time()
             with accelerator.accumulate(model):
                 loss = _diffusion_step(
                     train_batch,
@@ -345,6 +376,8 @@ def training_loop(
                     scheduler.step()
                 optimizer.zero_grad(set_to_none=True)
                 train_loss += loss.item()
+            step_time += time.time() - step_start
+            batch_count += 1
 
             if loading_bar:
                 lr = optimizer.param_groups[0]["lr"]
@@ -365,10 +398,22 @@ def training_loop(
         )
 
         elapsed = time.time() - start_time
+        timing = torch.tensor(
+            [data_wait_time, step_time, float(batch_count)],
+            device=accelerator.device,
+        )
+        gathered_timing = accelerator.gather(timing).view(-1, 3).mean(dim=0)
+        mean_batches = max(float(gathered_timing[2].item()), 1.0)
+        mean_data_wait = float(gathered_timing[0].item())
+        mean_step_time = float(gathered_timing[1].item())
         accelerator.print(
             f"Epoch {epoch + 1}/{epochs}, train_loss={gathered_train_loss:.6f}, "
             f"valid_loss={valid_loss if valid_loss is not None else 'n/a'}, "
-            f"elapsed={elapsed:.2f}s"
+            f"elapsed={elapsed:.2f}s, data_wait={mean_data_wait:.2f}s "
+            f"({mean_data_wait / mean_batches:.4f}s/batch), "
+            f"step_time={mean_step_time:.2f}s "
+            f"({mean_step_time / mean_batches:.4f}s/batch), "
+            f"batches={int(mean_batches)}"
         )
 
         if accelerator.is_main_process:

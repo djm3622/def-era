@@ -1,8 +1,8 @@
 """ERA5 dataset handling"""
 
-from datetime import datetime, timedelta
 import os
 import re
+from typing import Sequence
 
 import dask
 import numpy
@@ -11,6 +11,7 @@ import torch
 import xarray
 
 from data.forcings import time_forcings, toa_radiation
+
 
 class ERA5Dataset(torch.utils.data.Dataset):
     """Prepare and process ERA5 dataset for Pytorch."""
@@ -22,22 +23,40 @@ class ERA5Dataset(torch.utils.data.Dataset):
         end_date: str,
         forecast_steps: int = 1,
         dtype=torch.float32,
+        preload: bool = False,
         cfg: DictConfig = {},
+        time_interval: str = None,
+        prediction_stage: bool = False,
     ) -> None:
         
+        self.cfg = cfg
         features_cfg = cfg.features
+        self.preload = preload
         self.eps = 1e-12
         self.root_dir = root_dir
         self.forecast_steps = forecast_steps
         self.dtype = dtype
         self.forcing_inputs = features_cfg.input.forcings
+        self.prediction_stage = prediction_stage
+        self.n_time_inputs = int(cfg.dataset.get("n_time_inputs", 1))
 
         # Lazy open this dataset
         ds = xarray.open_mfdataset(
             os.path.join(root_dir, "*[0-9]"),
-            chunks={"time": self.forecast_steps + 1},
+            chunks={"time": 1},
             engine="zarr",
+            preprocess=lambda ds: ds.assign_coords(
+                latitude=ds.latitude.astype("float64").round(6),
+                longitude=ds.longitude.astype("float64").round(6),
+            ),
+            join="exact",
         )
+
+        if ds.latitude.values[0] > ds.latitude.values[-1]:
+            ds = ds.sortby("latitude")
+
+        if ds.longitude.values[0] > ds.longitude.values[-1]:
+            ds = ds.sortby("longitude")
 
         # Add stats to data array
         ds_stats = xarray.open_dataset(
@@ -66,25 +85,36 @@ class ERA5Dataset(torch.utils.data.Dataset):
 
         # Add the number of forecast steps to the range of dates
         time_resolution = int(cfg.dataset.time_resolution[:-1])
+        if time_interval is None:
+            time_interval = time_resolution
+        else:
+            time_interval = int(time_interval[:-1])
+        self.interval_steps = time_interval // time_resolution
 
-        # Get the number of additional time instances needed in data for autoregression
-        hours = time_resolution * (self.forecast_steps)
-        time_delta = numpy.timedelta64(timedelta(hours=hours))
+        prediction_delta = cfg.dataset.get(
+            "prediction_delta",
+            cfg.dataset.time_resolution,
+        )
+        self.prediction_shift = (
+            int(prediction_delta[:-1]) // time_resolution - 1
+        ) * self.interval_steps
 
-        # Convert end_date to a datetime object and adjust end date
+        start_date_dt = numpy.datetime64(start_date, "s")
+        step = numpy.timedelta64(time_resolution, "h")
+        adjusted_start_date = start_date_dt - (self.n_time_inputs - 1) * step
+        self._time_index_offset = self.n_time_inputs - 1
+
         if end_date is not None:
-
             if "T" not in end_date:
                 end_date += "T23:59:59"
-
-            end_date_dt = numpy.datetime64(end_date)
-            adjusted_end_date = end_date_dt + time_delta
         else:
-            start_date_dt = numpy.datetime64(start_date)
-            adjusted_end_date = start_date_dt + time_delta
+            end_date = start_date
 
-        # Select the time range needed to process this dataset
-        ds = ds.sel(time=slice(start_date, adjusted_end_date))
+        # Keep the requested date window separate from the full lazy dataset.
+        # Target values beyond the final input time are read from ``ds``.
+        ds_loader = ds.sel(time=slice(start_date, end_date, self.interval_steps))
+        self.ds_loader = ds_loader
+        ds = ds.sel(time=slice(adjusted_start_date, None))
 
         # Extract latitude and longitude to build the graph
         self.lat = ds.latitude.values
@@ -92,9 +122,9 @@ class ERA5Dataset(torch.utils.data.Dataset):
         self.lat_size = len(self.lat)
         self.lon_size = len(self.lon)
 
-        # The number of time instances in the dataset represents its length
-        self.time = ds.time.values
-        self.length = ds.time.size
+        # The number of requested input times represents dataset length.
+        self.time = ds_loader.time.values
+        self.length = ds_loader.time.size
 
         # Store the size of the grid (lat * lon)
         self.grid_size = ds.latitude.size * ds.longitude.size
@@ -125,12 +155,22 @@ class ERA5Dataset(torch.utils.data.Dataset):
         # Constant input variables
         ds_constants = xarray.open_dataset(
             os.path.join(root_dir, "constants"), engine="zarr"
-        )
+        ).compute()
+
+        if ds_constants.latitude.values[0] > ds_constants.latitude.values[-1]:
+            ds_constants = ds_constants.sortby("latitude")
+
+        if ds_constants.longitude.values[0] > ds_constants.longitude.values[-1]:
+            ds_constants = ds_constants.sortby("longitude")
 
         # Convert lat/lon to radians
         lat_rad = torch.from_numpy(numpy.deg2rad(self.lat)).to(self.dtype)
         lon_rad = torch.from_numpy(numpy.deg2rad(self.lon)).to(self.dtype)
-        lat_rad_grid, lon_rad_grid = torch.meshgrid(lat_rad, lon_rad, indexing="ij")
+        self.lat_rad_grid, self.lon_rad_grid = torch.meshgrid(
+            lat_rad,
+            lon_rad,
+            indexing="ij",
+        )
 
         # Use zscore to normalize the following variables
         normalize_const_vars = {
@@ -141,10 +181,6 @@ class ERA5Dataset(torch.utils.data.Dataset):
 
         normalized_constants = []
         for var in features_cfg.input.constants:
-            # Skip latitude and longitude, as they are always added in radians
-            if var == "latitude" or var == "longitude":
-                continue
-
             # Normalize constants and keep in memory
             if var in normalize_const_vars:
                 array = (
@@ -152,34 +188,44 @@ class ERA5Dataset(torch.utils.data.Dataset):
                     - ds_constants[var].attrs["mean"]
                 ) / ds_constants[var].attrs["std"]
 
-                normalized_constants.append(array)
+                normalized_constants.append(array.to(self.dtype))
 
         # Get land-sea mask (no normalization needed)
-        land_sea_mask = torch.from_numpy(ds_constants["land_sea_mask"].data).to(
-            self.dtype
-        )
+        constant_channels = [*normalized_constants]
+        if "land_sea_mask" in features_cfg.input.constants:
+            constant_channels.append(
+                torch.from_numpy(ds_constants["land_sea_mask"].data).to(self.dtype)
+            )
 
-        # Stack all constant features together
-        if self.forecast_steps == 0:
-            self.constant_data = (
-                torch.stack(
-                    [*normalized_constants, land_sea_mask, lat_rad_grid, lon_rad_grid]
-                )
-                .permute(1, 2, 0)
-                .reshape(self.lat_size, self.lon_size, -1)
-                .unsqueeze(0)
-                .expand(1, -1, -1, -1)
+        geometric_constants = self._compute_geometric_constants()
+        for var in (
+            "lon_spacing",
+            "cos_latitude",
+            "cos_longitude",
+            "sin_longitude",
+            "latitude",
+            "longitude",
+        ):
+            if var in features_cfg.input.constants:
+                constant_channels.append(geometric_constants[var])
+
+        expected_constants = len(features_cfg.input.constants)
+        actual_constants = len(constant_channels)
+        if actual_constants != expected_constants:
+            raise ValueError(
+                "Constant count mismatch: expected "
+                f"{expected_constants} constants from configuration, "
+                f"but built {actual_constants}."
             )
-        else:
-            self.constant_data = (
-                torch.stack(
-                    [*normalized_constants, land_sea_mask, lat_rad_grid, lon_rad_grid]
-                )
-                .permute(1, 2, 0)
-                .reshape(self.lat_size, self.lon_size, -1)
-                .unsqueeze(0)
-                .expand(self.forecast_steps, -1, -1, -1)
-            )
+
+        constant_steps = max(int(self.forecast_steps), 1)
+        self.constant_data = (
+            torch.stack(constant_channels)
+            .permute(1, 2, 0)
+            .reshape(self.lat_size, self.lon_size, -1)
+            .unsqueeze(0)
+            .expand(constant_steps, -1, -1, -1)
+        )
 
         # Store these for access in forecaster
         self.ds_constants = ds_constants
@@ -192,10 +238,18 @@ class ERA5Dataset(torch.utils.data.Dataset):
         self.dyn_output_features = common_features + list(
             set(output_atmospheric) - set(input_atmospheric)
         )
-        
+
         # Pre-select the features in the right order
         ds_input = ds.sel(features=self.dyn_input_features)
         ds_output = ds.sel(features=self.dyn_output_features)
+        self.ds_loader = self.ds_loader.sel(features=self.dyn_input_features)
+        self.ds_loader = self.ds_loader.transpose(
+            "time", "latitude", "longitude", "features"
+        )
+
+        if self.preload:
+            ds_input = ds_input.compute()
+            ds_output = ds_output.compute()
 
         # Fetch data in the tensor layout expected by __getitem__:
         # [time, latitude, longitude, features]. PARADIS preprocessing writes
@@ -220,38 +274,77 @@ class ERA5Dataset(torch.utils.data.Dataset):
         self.num_out_features = len(self.dyn_output_features)
 
     def __len__(self):
-        # Do not yield a value for the last time in the dataset since there
-        # is no future data
-        return self.length - self.forecast_steps
+        return self.length
 
     def __getitem__(self, ind: int):
+        input_data, true_data = self._load_input_output([ind])
+        return self._build_sample(input_data.isel(batch=0), true_data.isel(batch=0))
 
-        # Extract values from the requested indices
-        input_data = self.ds_input.isel(time=slice(ind, ind + self.forecast_steps))
+    def __getitems__(self, indices: Sequence[int]):
+        if type(self).__getitem__ is not ERA5Dataset.__getitem__:
+            return [self[int(index)] for index in indices]
 
-        true_data = self.ds_output.isel(
-            time=slice(ind + 1, ind + self.forecast_steps + 1)
+        input_data, true_data = self._load_input_output(indices)
+        return [
+            self._build_sample(
+                input_data.isel(batch=batch_index),
+                true_data.isel(batch=batch_index),
+            )
+            for batch_index in range(len(indices))
+        ]
+
+    def _load_input_output(self, indices: Sequence[int]):
+        if self.forecast_steps <= 0:
+            raise ValueError("ERA5Dataset requires forecast_steps > 0")
+
+        sample_indices = numpy.asarray(
+            [int(index) for index in indices],
+            dtype=numpy.int64,
+        )
+        sample_indices = (
+            sample_indices * self.interval_steps + self._time_index_offset
         )
 
-        # Load arrays into CPU memory
-        with dask.config.set(scheduler="threads"):
-            input_data, true_data = dask.compute(input_data, true_data)
+        step_offsets = numpy.arange(self.forecast_steps, dtype=numpy.int64)
+        input_indices = sample_indices[:, None] + step_offsets[None, :]
+        output_indices = (
+            sample_indices[:, None]
+            + 1
+            + self.prediction_shift
+            + step_offsets[None, :]
+        )
 
-        # # Add checks for invalid values
+        input_indexer = xarray.DataArray(input_indices, dims=("batch", "step"))
+        output_indexer = xarray.DataArray(output_indices, dims=("batch", "step"))
+
+        input_data = self.ds_input.isel(time=input_indexer)
+        true_data = self.ds_output.isel(time=output_indexer)
+
+        # Load arrays into CPU memory
+        input_data, true_data = dask.compute(
+            input_data,
+            true_data,
+            scheduler="synchronous",
+            traverse=False,
+        )
+
         if numpy.isnan(input_data.data).any() or numpy.isnan(true_data.data).any():
             raise ValueError("NaN values detected in input/output data")
 
+        return input_data, true_data
+
+    def _build_sample(self, input_data, true_data):
         # Convert to tensors - data comes in [time, lat, lon, features]
-        x = torch.tensor(input_data.data, dtype=self.dtype)
-        y = torch.tensor(true_data.data, dtype=self.dtype)
-        
+        x = torch.as_tensor(input_data.data, dtype=self.dtype)
+        y = torch.as_tensor(true_data.data, dtype=self.dtype)
+
         # calculate and store mean and std to introduce units
         mu, sigma = self._standard_units(x)
 
         # Apply normalizations : removed for easier autoregression [self._apply_normalization(x, y)]
         x, y = self._standardize(x), self._standardize(y)
-        
-         # Compute forcings
+
+        # Compute forcings
         forcings = self._compute_forcings(input_data)
 
         if forcings is not None:
@@ -265,6 +358,27 @@ class ERA5Dataset(torch.utils.data.Dataset):
         y_grid = y.permute(0, 3, 1, 2)
 
         return x_grid.squeeze(0), y_grid.squeeze(0), torch.ones(1), (mu, sigma)
+
+    def _compute_geometric_constants(self) -> dict[str, torch.Tensor]:
+        dlon = torch.diff(self.lon_rad_grid, dim=1)[0, 0]
+        radius_km = 6371.0
+        lon_spacing = 1.0 / (
+            2
+            * torch.arcsin(
+                torch.cos(self.lat_rad_grid) ** 2 * torch.sin(dlon / 2)
+            )
+            * radius_km
+        )
+        lon_spacing = (lon_spacing - lon_spacing.mean()) / lon_spacing.std()
+
+        return {
+            "lon_spacing": lon_spacing.to(self.dtype),
+            "cos_latitude": torch.cos(self.lat_rad_grid).to(self.dtype),
+            "cos_longitude": torch.cos(self.lon_rad_grid).to(self.dtype),
+            "sin_longitude": torch.sin(self.lon_rad_grid).to(self.dtype),
+            "latitude": self.lat_rad_grid.to(self.dtype),
+            "longitude": self.lon_rad_grid.to(self.dtype),
+        }
 
     def _standardize(self, x):
         return (x - x.mean(dim=(1, 2), keepdim=True)) / x.std(dim=(1, 2), keepdim=True)

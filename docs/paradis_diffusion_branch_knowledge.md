@@ -17,7 +17,7 @@ The Hydra config for this path is `_config/paradis_diffusion.yaml`.
 ## Repository Areas
 
 - `paradis/`: checked-out PARADIS submodule. The branch uses its model implementation and preprocessing scripts.
-- `data/era5_paradis_diffusion_dataset.py`: dataset adapter that returns clean normalized states, static constants, sampled diffusion noise, and sampled timesteps.
+- `data/era5_paradis_diffusion_dataset.py`: dataset adapter that returns clean normalized states and exposes static constants once.
 - `model/paradis_diffusion/model.py`: wrapper that adapts upstream PARADIS into a diffusion noise predictor.
 - `model/paradis_diffusion/train.py`: diffusion training loop for the PARADIS wrapper.
 - `model/paradis_diffusion/external.py`: import shim that loads the PARADIS submodule despite both repositories using a top-level `model` package name.
@@ -36,7 +36,7 @@ dataset:
 
 The processed directory must contain the data, stats, and constants layout expected by `data/era5_dataset.py`, including:
 
-- data zarr shards matched by `xarray.open_mfdataset(os.path.join(root_dir, "*"), engine="zarr")`
+- data zarr shards matched by `xarray.open_mfdataset(os.path.join(root_dir, "*[0-9]"), engine="zarr")`
 - `stats` zarr with feature-level `mean`, `std`, `min`, `max`
 - `constants` zarr with PARADIS static fields
 
@@ -87,20 +87,29 @@ The script sets `PYTHONPATH="$PWD/paradis/data:${PYTHONPATH:-}"` so the PARADIS 
 
 ## Dataset Behavior
 
-`ERA5ParadisDiffusionDataset` subclasses `ERA5Dataset` with `forecast_steps=0`. Each item returns:
+`ERA5ParadisDiffusionDataset` subclasses `ERA5Dataset` with `forecast_steps=0`. Each item returns only the normalized clean state:
 
 ```python
-clean_state, constants, noise, timestep
+clean_state
 ```
 
 with tensor layout:
 
 - `clean_state`: `[state_channels, latitude, longitude]`
-- `constants`: `[static_channels, latitude, longitude]`
-- `noise`: same shape as `clean_state`
-- `timestep`: shape `[1]`, sampled uniformly from `[0, cfg.dataset.timestep)`
 
 The clean state is selected from one time index, normalized, and permuted from xarray's `[time, lat, lon, features]` layout into PyTorch channel-first grid layout.
+
+PyTorch batched fetches use `ERA5ParadisDiffusionDataset.__getitems__`, which
+materializes all requested clean states with one xarray/dask graph. This mirrors
+the upstream PARADIS preference for doing zarr reads in the dataset while
+leaving stochastic training tensors to the accelerator-side training step.
+
+Static constants are exposed once through `dataset.static_constants` with layout
+`[static_channels, latitude, longitude]`. `paradis_diffusion_trainer.py`
+registers those constants as a non-persistent model buffer so Accelerate moves
+them with the model instead of transferring a copy in every dataloader batch.
+Gaussian diffusion noise and random diffusion timesteps are sampled on the
+accelerator device inside `_diffusion_step`, not in dataset workers.
 
 Normalization is inherited from the base ERA5 dataset:
 
@@ -168,7 +177,7 @@ git submodule update --init paradis
 2. Creates an `Accelerator` with configured gradient accumulation and mixed precision.
 3. Seeds random number generators through `utils.utility.set_random_seeds`.
 4. Creates train and validation `ERA5ParadisDiffusionDataset` instances.
-5. Inspects the first sample to infer state and static channel counts.
+5. Inspects the first sample for the state channel count and reads `dataset.static_constants`.
 6. Builds the PARADIS diffusion denoiser.
 7. Optionally loads model weights from `experiment.from_checkpoint`.
 8. Creates AdamW, dataloaders, OneCycleLR, and MSE diffusion loss.
@@ -178,8 +187,10 @@ git submodule update --init paradis
 For each batch, `_diffusion_step` does standard DDPM-style noise prediction training:
 
 ```python
+noise = randn_like(clean_state)
+timestep = randint(0, num_diffusion_steps, device=clean_state.device)
 noisy_state = sqrt(alpha_bar_t) * clean_state + sqrt(1 - alpha_bar_t) * noise
-noise_pred = model(condition, noisy_state, timestep, constants)
+noise_pred = model(condition, noisy_state, timestep)
 loss = MSE(noise_pred, noise)
 ```
 
