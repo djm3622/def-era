@@ -31,5 +31,6 @@ black>=23.3.0
 
 # To download WeatherBench 2 dataset
 gsutil
+gcsfs==2024.12.0
 
 # To install : pip install -r requirements.txt --break-system-packages

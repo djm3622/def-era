@@ -1,0 +1,47 @@
+defaults:
+  - paradis_diffusion
+  - _self_
+
+distributed_training:
+  num_processes: 2
+  total_batch_size: 1
+  workers_per_gpu: 2
+  workers: 2
+  prefetch_factor: 1
+  grad_accumulate: 1
+  mixed_precision: "bf16"
+
+training_info:
+  epochs: 1
+  validation_batches: 2
+
+experiment:
+  experiment_name: "paradis-diffusion-1deg-2015-smoke"
+  save_path: "${oc.env:SCRATCH,/scratch/dmillard}/def-era/outputs/paradis-diffusion-1deg-2015-smoke/"
+
+sampling:
+  enabled: false
+
+dataset:
+  root_dir: "${oc.env:SCRATCH,/scratch/dmillard}/def-era/ERA5/1.0deg_2015"
+  time_resolution: 6h
+  forecast_steps: 1
+  timestep: 1000
+  beta_start: 1.0e-4
+  beta_end: 0.02
+  validate_nan: false
+
+training:
+  dataset:
+    start_date: 2015-01-01
+    end_date: 2015-10-31
+
+  validation_dataset:
+    start_date: 2015-11-01
+    end_date: 2015-12-31
+
+paradis:
+  model:
+    latent_size: 64
+    num_layers: 1
+    latent_size_static: 16
