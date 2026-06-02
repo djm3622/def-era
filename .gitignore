@@ -4,10 +4,8 @@ outputs/
 wandb/
 config_temp.yaml
 _output/
+docs/
 *.sh
-/home/dmillard/Projects/def-era/docs/paradis_diffusion_5deg.md
-/home/dmillard/Projects/def-era/docs/paradis_diffusion_branch_knowledge.md
-/home/dmillard/Projects/def-era/docs/paradis_diffusion_dataloader_speed.md
 data_viz.ipynb
 testing.ipynb
 
