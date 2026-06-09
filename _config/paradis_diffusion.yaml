@@ -15,9 +15,13 @@ distributed_training:
   mixed_precision: "fp16"
 
 optimization:
-  base_lr: 1.0e-5
-  max_lr: 1.0e-4
-  lr: 1.0e-5
+  base_lr: 3.0e-5
+  max_lr: 3.0e-4
+  lr: 3.0e-5
+  scheduler:
+    pct_start: 0.1
+    div_factor: 25
+    final_div_factor: 10
 
 training_info:
   epochs: 1
@@ -88,10 +92,10 @@ paradis:
     gradient_checkpointing: false
 
   model:
-    latent_size: 128
+    latent_size: 256
     forecast_steps: 1
     base_dt: 21600
-    num_layers: 2
+    num_layers: 4
     bias_channels: 10
     velocity_vectors: 8
     adv_interpolation: bilinear

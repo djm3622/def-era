@@ -1,7 +1,6 @@
 import torch.optim as optim
-import torch
 from omegaconf import DictConfig
-from torch.nn import Module
+
 
 def get_onecycle_lr(
     optimizer: optim.Optimizer,
@@ -9,17 +8,23 @@ def get_onecycle_lr(
     epoches: int,
     steps_per_epoch: int,
     pct_start: float = 0.1,
-    div_factor: int = 25,
+    div_factor: float = 25,
     final_div_factor: float = 1e4,
-    cfg: DictConfig = {}
+    cfg: DictConfig | None = None,
 ) -> optim.lr_scheduler:
-    
+    scheduler_cfg = {} if cfg is None else cfg
+    pct_start = float(scheduler_cfg.get("pct_start", pct_start))
+    div_factor = float(scheduler_cfg.get("div_factor", div_factor))
+    final_div_factor = float(
+        scheduler_cfg.get("final_div_factor", final_div_factor)
+    )
+
     return optim.lr_scheduler.OneCycleLR(
         optimizer,
         max_lr=max_lr,
         epochs=epoches,
         steps_per_epoch=steps_per_epoch,
-        pct_start=pct_start,  
-        div_factor=div_factor,  
-        final_div_factor=final_div_factor 
+        pct_start=pct_start,
+        div_factor=div_factor,
+        final_div_factor=final_div_factor,
     )

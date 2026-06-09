@@ -103,6 +103,7 @@ def main(cfg: DictConfig) -> None:
             cfg.optimization.max_lr,
             cfg.training_info.epochs,
             len(train_dl),
+            cfg=cfg.optimization.get("scheduler", {}),
         )
 
         train_dl, valid_dl, diffusion_model, optimizer, scheduler = accelerator.prepare(
