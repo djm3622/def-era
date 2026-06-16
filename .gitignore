@@ -7,7 +7,6 @@ _output/
 docs/*
 !docs/eccc_test_run.md
 !docs/eccc_1deg_full_training.md
-*.sh
 data_viz.ipynb
 testing.ipynb
 
