@@ -40,7 +40,7 @@ output_path="$1"
 
 mkdir -p "${output_path}"
 
-# Keep this list aligned with paradis/scripts/preprocess_weatherbench_data.py.
+# Keep this list aligned with scripts/preprocess_paradis_weatherbench_data.py.
 required_paths=(
     ".zattrs"
     ".zgroup"

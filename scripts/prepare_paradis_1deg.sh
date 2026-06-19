@@ -75,7 +75,7 @@ while (( year <= end_year )); do
 
     echo "Writing yearly data for ${year}-${chunk_end}."
     PYTHONPATH="$PWD/paradis/data:${PYTHONPATH:-}" "$python_bin" \
-        paradis/scripts/preprocess_weatherbench_data.py \
+        scripts/preprocess_paradis_weatherbench_data.py \
         -i "$raw_dir" \
         -o "$processed_dir" \
         --remove-poles \
@@ -90,7 +90,7 @@ done
 
 echo "Writing constants for ${begin_year}-${end_year}."
 PYTHONPATH="$PWD/paradis/data:${PYTHONPATH:-}" "$python_bin" \
-    paradis/scripts/preprocess_weatherbench_data.py \
+    scripts/preprocess_paradis_weatherbench_data.py \
     -i "$raw_dir" \
     -o "$processed_dir" \
     --remove-poles \

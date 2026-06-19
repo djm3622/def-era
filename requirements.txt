@@ -13,7 +13,7 @@ zarr>=2.18.3,<3.0
 xarray>=2025.1.0
 dask>=2024.12.1
 pandas==2.2.3
-numcodecs>=0.12.0
+numcodecs>=0.12.0,<0.16,!=0.14.0,!=0.14.1
 
 #Configuration
 hydra-core>=1.3.2
